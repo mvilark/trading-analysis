@@ -4,568 +4,36 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PnL Lens</title>
-<meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Drop in a Bitunix tax-report CSV and get a full PnL analysis: equity, drawdown, calendar, trade stats, funding and fees. Parsed in your browser.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
-<style>
-/* Layout: a trading-desk ledger. Sticky header + filter rail, summary first (net PnL hero + equity),
-   then a 12-column grid of analysis panels, then the tables that back every chart. Dark-first. */
-:root {
-  color-scheme: dark;
-  --bg: #0d1015;
-  --surface: #141920;
-  --surface-2: #1a2029;
-  --line: #252c37;
-  --grid: #1f2630;
-  --base: #333c4a;
-  --ink: #e7eaf0;
-  --ink-2: #aab2c0;
-  --muted: #7d8697;
-  --accent: #8ea2ff;
-  --accent-ink: #0d1015;
-  --gain: #1ca7a0;
-  --loss: #ea5a3c;
-  --gain-text: #45c9bf;
-  --loss-text: #ff8064;
-  --amber: #c98500;
-  --violet: #9085e9;
-  --mid: #383f4a;
-  --shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px rgba(0,0,0,0.25);
-  --font-display: "Bricolage Grotesque", "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --r: 10px;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    color-scheme: light;
-    --bg: #f3f4f7; --surface: #ffffff; --surface-2: #f2f4f8; --line: #e1e4ea; --grid: #eceef2; --base: #c9ced8;
-    --ink: #10141b; --ink-2: #485164; --muted: #687184; --accent: #4257d6; --accent-ink: #ffffff;
-    --gain: #13968f; --loss: #dc4a42; --gain-text: #0a7770; --loss-text: #bd342d;
-    --amber: #c98500; --violet: #6250d6; --mid: #e3e5ea;
-    --shadow: 0 1px 2px rgba(16,20,27,0.05), 0 6px 20px rgba(16,20,27,0.05);
-  }
-}
-:root[data-theme="light"] {
-  color-scheme: light;
-  --bg: #f3f4f7; --surface: #ffffff; --surface-2: #f2f4f8; --line: #e1e4ea; --grid: #eceef2; --base: #c9ced8;
-  --ink: #10141b; --ink-2: #485164; --muted: #687184; --accent: #4257d6; --accent-ink: #ffffff;
-  --gain: #13968f; --loss: #dc4a42; --gain-text: #0a7770; --loss-text: #bd342d;
-  --amber: #c98500; --violet: #6250d6; --mid: #e3e5ea;
-  --shadow: 0 1px 2px rgba(16,20,27,0.05), 0 6px 20px rgba(16,20,27,0.05);
-}
-
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0; background: var(--bg); color: var(--ink);
-  font: 400 14px/1.5 var(--font-body);
-}
-body::before {
-  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg);
-}
-button, input, select { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
-.wrap {
-  max-width: 1480px; margin: 0 auto;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-}
-.num { font-variant-numeric: tabular-nums; }
-.pos { color: var(--gain-text); }
-.neg { color: var(--loss-text); }
-.muted { color: var(--muted); }
-.mono { font-family: var(--font-mono); font-size: 12.5px; }
-
-/* Header */
-.top {
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--line);
-}
-.top .wrap { display: flex; align-items: center; gap: 16px; padding-block: 10px; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 10px; font: 650 18px/1 var(--font-display); letter-spacing: -0.01em; }
-.brand svg { flex: none; }
-.source { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; color: var(--ink-2); font-size: 12.5px; }
-.chip {
-  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--surface); white-space: nowrap; font-size: 12px;
-}
-.chip.demo { border-color: color-mix(in srgb, var(--amber) 55%, var(--line)); color: var(--ink); }
-.chip.demo::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
-.spacer { flex: 1; }
-.btn {
-  display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 8px; cursor: pointer;
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 500; font-size: 13px;
-  transition: background .15s, border-color .15s;
-}
-.btn:hover { background: var(--surface-2); border-color: var(--base); }
-.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
-.btn.icon { padding: 7px 9px; }
-.kbd { font: 500 10.5px var(--font-mono); padding: 1px 5px; border-radius: 4px; border: 1px solid currentColor; opacity: .6; }
-
-/* Filter rail */
-.filters { border-bottom: 1px solid var(--line); background: var(--bg); }
-.filters .wrap { display: flex; gap: 10px 18px; align-items: center; flex-wrap: wrap; padding-block: 10px; }
-.group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.group > .lbl { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--surface); }
-.seg button {
-  border: 0; background: transparent; padding: 4px 10px; border-radius: 6px; cursor: pointer; color: var(--ink-2); font-size: 12.5px;
-}
-.seg button:hover { color: var(--ink); }
-.seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); box-shadow: 0 0 0 1px var(--line) inset; font-weight: 600; }
-input[type="date"], select, input[type="search"] {
-  border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 8px; font-size: 12.5px; min-width: 0;
-}
-.toggle {
-  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-size: 12.5px;
-}
-.toggle::before {
-  content: ""; width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--base); flex: none;
-}
-.toggle[aria-pressed="true"] { color: var(--ink); }
-.toggle[aria-pressed="true"]::before {
-  background: var(--accent); border-color: var(--accent);
-  box-shadow: inset 0 0 0 2px var(--surface);
-}
-
-/* Banner */
-.banner { margin-top: 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
-  padding: 12px 16px; border-radius: var(--r); border: 1px dashed color-mix(in srgb, var(--amber) 50%, var(--line));
-  background: color-mix(in srgb, var(--amber) 7%, var(--surface)); }
-.banner p { margin: 0; flex: 1 1 320px; color: var(--ink-2); }
-.banner strong { color: var(--ink); }
-.error { border-style: solid; border-color: color-mix(in srgb, var(--loss) 60%, var(--line)); background: color-mix(in srgb, var(--loss) 8%, var(--surface)); }
-
-/* Grid + cards */
-main { padding-block: 16px 48px; }
-.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
-.card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0;
-  box-shadow: var(--shadow);
-}
-.s3 { grid-column: span 3; } .s4 { grid-column: span 4; } .s5 { grid-column: span 5; } .s6 { grid-column: span 6; }
-.s7 { grid-column: span 7; } .s8 { grid-column: span 8; } .s12 { grid-column: span 12; }
-.card-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.card-h h2 { margin: 0; font: 600 14px/1.3 var(--font-body); letter-spacing: 0; text-wrap: balance; }
-.card-h .sub { color: var(--muted); font-size: 12px; }
-.card-h .right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.section-title {
-  grid-column: 1 / -1; margin: 18px 0 -4px; display: flex; align-items: baseline; gap: 12px;
-  font: 600 11px/1 var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
-}
-.section-title::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.chart { width: 100%; height: 280px; }
-.chart.tall { height: 360px; }
-.chart.short { height: 220px; }
-.chart-fallback { color: var(--muted); font-size: 13px; padding: 24px 0; }
-
-/* Hero */
-.hero { display: flex; flex-direction: column; gap: 14px; }
-.hero .eyebrow { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
-.hero .big { font: 650 clamp(40px, 5vw, 56px)/1 var(--font-display); letter-spacing: -0.03em; display: flex; align-items: baseline; gap: 10px; }
-.hero .big small { font: 500 15px var(--font-body); color: var(--muted); letter-spacing: 0; }
-.hero .roi { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--ink-2); font-size: 13px; }
-.breakdown { display: grid; gap: 0; border-top: 1px solid var(--line); }
-.breakdown div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-.breakdown div span:first-child { color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
-.breakdown div.total { border-bottom: 0; font-weight: 600; }
-.breakdown div.total span:first-child { color: var(--ink); }
-.key { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
-.spark { height: 46px; width: 100%; }
-
-/* KPI tiles */
-.kpis { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
-.tile { padding: 14px 16px; min-width: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.tile:nth-child(6n) { border-right: 0; }
-.tile:nth-last-child(-n+6) { border-bottom: 0; }
-.tile .t-l { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-.tile .t-v { font: 600 22px/1.2 var(--font-display); letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile .t-s { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
-.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .02em;
-  padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); }
-.pill.good { color: var(--gain-text); border-color: color-mix(in srgb, var(--gain) 45%, var(--line)); }
-.pill.bad { color: var(--loss-text); border-color: color-mix(in srgb, var(--loss) 45%, var(--line)); }
-.wl { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; margin-top: 8px; background: var(--surface); }
-.wl i { display: block; height: 100%; border-radius: 2px; }
-
-/* Calendar */
-.cal-nav { display: flex; align-items: center; gap: 6px; }
-.cal-nav strong { min-width: 9.5em; text-align: center; font-weight: 600; }
-.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(0, 1.1fr); gap: 4px; }
-.cal .dow { font-size: 11px; color: var(--muted); text-align: left; padding: 0 6px 2px; letter-spacing: .04em; }
-.cal .cell {
-  min-height: 74px; border-radius: 7px; padding: 6px 7px; background: var(--surface-2); border: 1px solid transparent;
-  display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: default; min-width: 0; color: var(--ink);
-}
-.cal button.cell { cursor: pointer; }
-.cal button.cell:hover { border-color: var(--base); }
-.cal .cell[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-.cal .cell.out { background: transparent; border: 1px dashed var(--grid); }
-.cal .cell .d { font-size: 11px; color: var(--muted); }
-.cal .cell .v { font: 600 13px/1.2 var(--font-body); font-variant-numeric: tabular-nums; margin-top: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal .cell .n { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal .wk { background: transparent; border: 1px solid var(--line); }
-.cal .wk .d { text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
-.cal-legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
-.cal-legend .ramp { display: flex; gap: 2px; }
-.cal-legend .ramp i { width: 16px; height: 10px; border-radius: 2px; display: block; }
-
-/* Score */
-.score-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; }
-.score-num { font: 650 44px/1 var(--font-display); letter-spacing: -0.03em; }
-.score-num small { font: 500 14px var(--font-body); color: var(--muted); letter-spacing: 0; }
-.parts { display: grid; gap: 8px; margin-top: 10px; }
-.part { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) 2.6em; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-2); }
-.part .bar { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
-.part .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
-.part .pv { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
-
-/* Stat list */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px 16px; margin-top: 12px; }
-.stats div { min-width: 0; }
-.stats dt { font-size: 11.5px; color: var(--muted); }
-.stats dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
-
-/* Tables */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: -4px 0 12px; overflow-x: auto; }
-.tabs button { border: 0; background: transparent; padding: 8px 12px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; font-weight: 500; }
-.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
-.tabs button .count { color: var(--muted); font-weight: 400; margin-left: 4px; font-size: 12px; }
-.tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-.tools input[type="search"] { width: min(260px, 100%); }
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; max-height: 520px; overflow-y: auto; }
-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
-th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-th { position: sticky; top: 0; background: var(--surface-2); font-weight: 600; color: var(--ink-2); font-size: 11.5px; letter-spacing: .02em; z-index: 1; }
-th.sortable { cursor: pointer; user-select: none; }
-th.sortable:hover { color: var(--ink); }
-th[aria-sort="ascending"]::after { content: " ↑"; color: var(--accent); }
-th[aria-sort="descending"]::after { content: " ↓"; color: var(--accent); }
-td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
-tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
-.cat { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ink-2); }
-.cat::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: var(--c, var(--muted)); }
-.res { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
-.res.win { color: var(--gain-text); background: color-mix(in srgb, var(--gain) 14%, transparent); }
-.res.loss { color: var(--loss-text); background: color-mix(in srgb, var(--loss) 14%, transparent); }
-.res.be { color: var(--ink-2); background: var(--surface-2); }
-.more { margin-top: 10px; }
-.empty { color: var(--muted); padding: 20px; text-align: center; }
-
-/* Notes */
-.notes { margin: 0; padding-left: 18px; color: var(--ink-2); display: grid; gap: 6px; font-size: 13px; }
-.recon { display: grid; gap: 0; }
-.recon div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-.recon div:last-of-type { border-bottom: 0; }
-.status { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
-.status b { flex: none; }
-p.small { font-size: 12.5px; color: var(--ink-2); margin: 8px 0 0; }
-
-/* Drop overlay + toast */
-.drop {
-  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
-  background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(4px);
-}
-.drop div { border: 2px dashed var(--accent); border-radius: 16px; padding: 40px 48px; font: 600 20px var(--font-display); background: var(--surface); text-align: center; }
-.drop div span { display: block; font: 400 13px var(--font-body); color: var(--muted); margin-top: 6px; }
-.toast {
-  position: fixed; z-index: 60; left: 50%; transform: translateX(-50%);
-  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-  background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 8px; font-size: 13px; box-shadow: var(--shadow);
-}
-.copybox { width: 100%; height: 120px; margin-top: 8px; font: 12px var(--font-mono); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); }
-
-/* Responsive */
-@media (max-width: 1100px) {
-  .s3, .s4, .s5, .s7, .s8 { grid-column: span 6; }
-  .hero-card { grid-column: span 12; }
-  .eq-card { grid-column: span 12; }
-  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .tile:nth-child(6n) { border-right: 1px solid var(--line); }
-  .tile:nth-child(4n) { border-right: 0; }
-  .tile:nth-last-child(-n+6) { border-bottom: 1px solid var(--line); }
-  .tile:nth-last-child(-n+4) { border-bottom: 0; }
-}
-@media (max-width: 760px) {
-  .s3, .s4, .s5, .s6, .s7, .s8 { grid-column: span 12; }
-  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tile:nth-child(4n) { border-right: 1px solid var(--line); }
-  .tile:nth-child(2n) { border-right: 0; }
-  .tile:nth-last-child(-n+4) { border-bottom: 1px solid var(--line); }
-  .tile:nth-last-child(-n+2) { border-bottom: 0; }
-  .tile .t-v { font-size: 19px; }
-  .cal .cell { min-height: 54px; padding: 4px; }
-  .cal .cell .n { display: none; }
-  .cal .cell .v { font-size: 11px; }
-  .cal .dow { padding: 0 2px; font-size: 10px; }
-  .score-wrap { grid-template-columns: minmax(0, 1fr); }
-  .chart { height: 250px; }
-  .chart.tall { height: 320px; }
-  .source .hide-sm { display: none; }
-  .btn .label-lg { display: none; }
-}
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
-</style>
+<style>/*UI-CSS*/</style>
 </head>
 <body>
-<header class="top">
-  <div class="wrap">
-    <div class="brand">
-      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-        <rect x="2" y="7" width="4" height="9" rx="1.5" fill="var(--loss)"></rect>
-        <line x1="4" y1="4" x2="4" y2="19" stroke="var(--loss)" stroke-width="1.5" stroke-linecap="round"></line>
-        <rect x="9" y="4" width="4" height="11" rx="1.5" fill="var(--gain)"></rect>
-        <line x1="11" y1="2" x2="11" y2="18" stroke="var(--gain)" stroke-width="1.5" stroke-linecap="round"></line>
-        <rect x="16" y="3" width="4" height="8" rx="1.5" fill="var(--accent)"></rect>
-        <line x1="18" y1="1.5" x2="18" y2="14" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"></line>
-      </svg>
-      PnL Lens
-    </div>
-    <div class="source" id="source" aria-live="polite"></div>
-    <div class="spacer"></div>
-    <button class="btn primary" id="uploadBtn" type="button" title="Upload a Bitunix tax report CSV (U)">
-      <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 11V2.5M4.5 6 8 2.5 11.5 6M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>Upload CSV</span>
-    </button>
-    <button class="btn icon" id="themeBtn" type="button" aria-label="Switch light or dark theme" title="Switch theme">
-      <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13z" fill="currentColor"/><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
-    </button>
-    <input type="file" id="fileInput" accept=".csv,text/csv" multiple hidden>
-    <input type="file" id="addInput" accept=".csv,text/csv" multiple hidden>
-  </div>
-</header>
-
-<nav class="filters" aria-label="Filters">
-  <div class="wrap">
-    <div class="group">
-      <span class="lbl">Range</span>
-      <div class="seg" id="presets" role="group" aria-label="Date range">
-        <button type="button" data-p="all">All</button>
-        <button type="button" data-p="7">7D</button>
-        <button type="button" data-p="30">30D</button>
-        <button type="button" data-p="90">90D</button>
-        <button type="button" data-p="ytd">YTD</button>
-      </div>
-      <input type="date" id="fromDate" aria-label="From date">
-      <span class="muted">→</span>
-      <input type="date" id="toDate" aria-label="To date">
-    </div>
-    <div class="group">
-      <span class="lbl">Market</span>
-      <div class="seg" id="market" role="group" aria-label="Market">
-        <button type="button" data-m="all">All</button>
-        <button type="button" data-m="futures">Futures</button>
-        <button type="button" data-m="spot">Spot</button>
-      </div>
-    </div>
-    <div class="group" id="accountGroup" hidden>
-      <span class="lbl">Account</span>
-      <select id="account" aria-label="Account"></select>
-    </div>
-    <div class="group">
-      <span class="lbl">Net includes</span>
-      <button type="button" class="toggle" id="incFees" aria-pressed="true">Fees</button>
-      <button type="button" class="toggle" id="incFunding" aria-pressed="true">Funding</button>
-      <button type="button" class="toggle" id="incIncome" aria-pressed="true">Rewards</button>
-    </div>
-  </div>
-</nav>
-
-<main class="wrap">
-  <div class="banner" id="banner" hidden></div>
-
-  <div class="grid">
-    <section class="card s4 hero-card" aria-labelledby="heroLabel">
-      <div class="hero">
-        <div>
-          <div class="eyebrow" id="heroLabel">Net PnL</div>
-          <div class="big" id="heroValue">—</div>
-        </div>
-        <div class="roi" id="heroRoi"></div>
-        <div class="breakdown" id="heroBreakdown"></div>
-      </div>
-    </section>
-
-    <section class="card s8 eq-card" aria-labelledby="eqTitle">
-      <div class="card-h">
-        <h2 id="eqTitle">Equity curve</h2>
-        <span class="sub" id="eqSub"></span>
-        <div class="right">
-          <div class="seg" id="eqMode" role="group" aria-label="Equity view">
-            <button type="button" data-v="pnl" aria-pressed="true">Cumulative PnL</button>
-            <button type="button" data-v="equity">Account value</button>
-          </div>
-        </div>
-      </div>
-      <div class="chart tall" id="chEquity" role="img" aria-label="Equity curve with drawdown"></div>
-    </section>
-
-    <div class="kpis" id="kpis" role="list" aria-label="Key metrics"></div>
-
-    <h2 class="section-title">Days and periods</h2>
-
-    <section class="card s7" aria-labelledby="calTitle">
-      <div class="card-h">
-        <h2 id="calTitle">Daily PnL calendar</h2>
-        <span class="sub" id="calSub"></span>
-        <div class="right cal-nav">
-          <button class="btn icon" type="button" id="calPrev" aria-label="Previous month">‹</button>
-          <strong id="calMonth"></strong>
-          <button class="btn icon" type="button" id="calNext" aria-label="Next month">›</button>
-        </div>
-      </div>
-      <div class="cal" id="cal"></div>
-      <div class="cal-legend" id="calLegend"></div>
-    </section>
-
-    <section class="card s5" aria-labelledby="wfTitle">
-      <div class="card-h"><h2 id="wfTitle">Where the PnL came from</h2><span class="sub">USDT, selected range</span></div>
-      <div class="chart tall" id="chWaterfall" role="img" aria-label="PnL waterfall: wins, losses, fees, funding, rewards, net"></div>
-    </section>
-
-    <section class="card s7" aria-labelledby="perTitle">
-      <div class="card-h">
-        <h2 id="perTitle">PnL by period</h2>
-        <div class="right">
-          <div class="seg" id="period" role="group" aria-label="Period">
-            <button type="button" data-v="day" aria-pressed="true">Daily</button>
-            <button type="button" data-v="week">Weekly</button>
-            <button type="button" data-v="month">Monthly</button>
-          </div>
-        </div>
-      </div>
-      <div class="chart" id="chPeriod" role="img" aria-label="Net PnL per period"></div>
-    </section>
-
-    <section class="card s5" aria-labelledby="scoreTitle">
-      <div class="card-h"><h2 id="scoreTitle">Trader score</h2><span class="sub">0–100, six weighted factors</span></div>
-      <div class="score-wrap">
-        <div>
-          <div class="score-num" id="scoreNum">—</div>
-          <div class="parts" id="scoreParts"></div>
-        </div>
-        <div class="chart short" id="chRadar" role="img" aria-label="Trader score radar"></div>
-      </div>
-    </section>
-
-    <h2 class="section-title">Trades</h2>
-
-    <section class="card s7" aria-labelledby="seqTitle">
-      <div class="card-h"><h2 id="seqTitle">Trade by trade</h2><span class="sub">Net of closing fee, in order closed</span></div>
-      <div class="chart" id="chSeq" role="img" aria-label="Net PnL of each trade in order"></div>
-      <dl class="stats" id="tradeStats"></dl>
-    </section>
-
-    <section class="card s5" aria-labelledby="distTitle">
-      <div class="card-h"><h2 id="distTitle">Result distribution</h2><span class="sub">Trades per PnL bucket</span></div>
-      <div class="chart" id="chDist" role="img" aria-label="Histogram of trade results"></div>
-    </section>
-
-    <section class="card s6" aria-labelledby="wdTitle">
-      <div class="card-h"><h2 id="wdTitle">By weekday</h2><span class="sub">Net PnL of trades closed, UTC</span></div>
-      <div class="chart short" id="chWeekday" role="img" aria-label="Net PnL by weekday"></div>
-    </section>
-
-    <section class="card s6" aria-labelledby="hrTitle">
-      <div class="card-h"><h2 id="hrTitle">By hour of close</h2><span class="sub">Net PnL of trades closed, UTC</span></div>
-      <div class="chart short" id="chHour" role="img" aria-label="Net PnL by hour of day"></div>
-    </section>
-
-    <h2 class="section-title">Funding and fees</h2>
-
-    <section class="card s7" aria-labelledby="fundTitle">
-      <div class="card-h"><h2 id="fundTitle">Funding</h2><span class="sub" id="fundSub"></span></div>
-      <div class="chart tall" id="chFunding" role="img" aria-label="Funding received and paid per day, and open positions at each settlement"></div>
-    </section>
-
-    <section class="card s5" aria-labelledby="costTitle">
-      <div class="card-h"><h2 id="costTitle">Cost drag</h2><span class="sub">Cumulative fees and funding</span></div>
-      <div class="chart" id="chCost" role="img" aria-label="Cumulative fees and funding"></div>
-      <dl class="stats" id="costStats"></dl>
-    </section>
-
-    <h2 class="section-title">Records</h2>
-
-    <section class="card s12" aria-label="Records" id="records">
-      <div class="tabs" role="tablist" id="tabs">
-        <button type="button" role="tab" data-t="trades" aria-selected="true">Trades<span class="count" id="cTrades"></span></button>
-        <button type="button" role="tab" data-t="monthly" aria-selected="false">Monthly<span class="count" id="cMonthly"></span></button>
-        <button type="button" role="tab" data-t="ledger" aria-selected="false">Ledger<span class="count" id="cLedger"></span></button>
-        <button type="button" role="tab" data-t="flows" aria-selected="false">Deposits &amp; withdrawals<span class="count" id="cFlows"></span></button>
-        <button type="button" role="tab" data-t="assets" aria-selected="false">Other assets<span class="count" id="cAssets"></span></button>
-      </div>
-      <div class="tools" id="tools"></div>
-      <div class="table-wrap" id="tableWrap"></div>
-      <div id="tableMore"></div>
-    </section>
-
-    <section class="card s4" aria-labelledby="recTitle">
-      <div class="card-h"><h2 id="recTitle">Balance check</h2></div>
-      <div id="recon"></div>
-    </section>
-
-    <section class="card s4" aria-labelledby="dataTitle">
-      <div class="card-h"><h2 id="dataTitle">Data notes</h2>
-        <div class="right"><button class="btn" type="button" id="addBtn">Add another export</button></div>
-      </div>
-      <ul class="notes" id="dataNotes"></ul>
-    </section>
-
-    <section class="card s4" aria-labelledby="limTitle">
-      <div class="card-h"><h2 id="limTitle">How the numbers work</h2></div>
-      <ul class="notes">
-        <li><b>Net PnL</b> = realized PnL + fees + funding + rewards, all in USDT. Deposits, withdrawals and transfers between accounts are left out.</li>
-        <li><b>A trade</b> is one realized PnL row. Its closing fee is the fee row in the same minute. Opening fees are counted in totals but can't be tied to a trade, because the export has no position ID.</li>
-        <li><b>Not in this export:</b> symbol, side, leverage, entry and exit price. So there's no per-symbol or long/short split.</li>
-        <li><b>Returns</b> are time-weighted on start-of-day balance, so deposits don't count as gains. Sharpe and Sortino are annualized with √365.</li>
-        <li>Everything is parsed in this browser tab. Your file is never uploaded.</li>
-      </ul>
-    </section>
-  </div>
-</main>
-
-<div class="drop" id="drop" hidden><div>Drop your CSV to analyze it<span>Bitunix tax report export · several files merge</span></div></div>
-<div class="toast" id="toast" role="status" hidden></div>
+<!--UI-BODY-->
 <script id="pnl-core">
-/* PnL Lens core: parses Bitunix tax-report CSVs and computes performance analytics.
-   Pure functions, no DOM access, so tests can run this block in Node. */
+/* PnL Lens core: parses Bitunix tax-report CSVs and computes PnL analytics.
+   Pure functions, no DOM access, so Node tests can run this block. */
 (function (root) {
   'use strict';
 
-  const EMPTY = new Set(['', '—', '–', '-', 'N/A', 'n/a', 'null', 'NULL']);
-  const STABLES = new Set(['USDT', 'USDC', 'FDUSD', 'USD']);
-  const DAY_MS = 86400000;
-  const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var DAY = 86400000;
+  var EMPTY = { '': 1, '—': 1, '–': 1, '-': 1, 'N/A': 1, 'n/a': 1, 'null': 1, 'NULL': 1 };
+  var STABLES = { USDT: 1, USDC: 1, FDUSD: 1, USD: 1 };
+  var WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var SEP = '␟';
 
-  // Label -> category. Covers every label in the Bitunix "Data Types" list.
-  const CATEGORY_LABELS = {
-    realized: ['PnL', 'CFD Realized PnL', 'Coupon Position PnL', 'Liquidation Settlement',
-      'CFD Liquidation', 'Coupon Position Liquidation'],
-    fee: ['Futures Fee', 'Guranteed SL Fee', 'Guaranteed SL Fee', 'CFD Swap Fee', 'Card FX Fee',
-      'Card Small-Value Fee', 'Event Registration Fee', 'Event Registration Fee Refund', 'Profit Shared'],
+  var CATEGORY_LABELS = {
+    realized: ['PnL', 'CFD Realized PnL', 'Coupon Position PnL', 'Liquidation Settlement', 'CFD Liquidation', 'Coupon Position Liquidation'],
+    fee: ['Futures Fee', 'Guranteed SL Fee', 'Guaranteed SL Fee', 'CFD Swap Fee', 'Card FX Fee', 'Card Small-Value Fee',
+      'Event Registration Fee', 'Event Registration Fee Refund', 'Profit Shared'],
     funding: ['Funding Cost'],
-    income: ['Referral Commission', 'Referral Cashback', 'Gifts & Rewards', 'Other Rewards',
-      'Trading Bonus', 'Reward Tokens', 'Lead Trader Income', 'Negative Balance Compensation',
-      'CFD Dividend', 'CFD Compensation', 'Earnings', 'Card Cashback', 'Card Reward',
-      'Fortune Fund Profit Share'],
-    event: ['Event Contract Order', 'Event Contract Payment', 'Event Contract Cancellation',
-      'Futures Event Contract Order', 'Futures Event Contract Payment', 'Futures Event Contract Cancel'],
-    cashflow: ['Deposit', 'Withdrawal', 'Fiat Deposit', 'Fiat Withdrawal', 'Fiat Exchange',
-      'Bank Transfer Buy', 'P2P Buy', 'P2P Sell', 'Card Deposit', 'Third-Party', 'Card Transfer In',
-      'Card Transfer Out', 'Card Payment', 'Card Refund', 'Card Reversal', 'Card Credit',
-      'Card Settlement Advance', 'Card Advance Repayment', 'Card Manual Adjustment In',
-      'Card Manual Adjustment Out'],
-    internal: ['Transfer', 'Internal Transfer', 'Main / Sub Account Transfer', 'Transfer (Copy Trading)',
-      'Transfer (Bot)', 'CFD Transfer'],
+    income: ['Referral Commission', 'Referral Cashback', 'Gifts & Rewards', 'Other Rewards', 'Trading Bonus', 'Reward Tokens',
+      'Lead Trader Income', 'Negative Balance Compensation', 'CFD Dividend', 'CFD Compensation', 'Earnings', 'Card Cashback',
+      'Card Reward', 'Fortune Fund Profit Share'],
+    event: ['Event Contract Order', 'Event Contract Payment', 'Event Contract Cancellation', 'Futures Event Contract Order',
+      'Futures Event Contract Payment', 'Futures Event Contract Cancel'],
+    cashflow: ['Deposit', 'Withdrawal', 'Fiat Deposit', 'Fiat Withdrawal', 'Fiat Exchange', 'Bank Transfer Buy', 'P2P Buy', 'P2P Sell',
+      'Card Deposit', 'Third-Party', 'Card Transfer In', 'Card Transfer Out', 'Card Payment', 'Card Refund', 'Card Reversal',
+      'Card Credit', 'Card Settlement Advance', 'Card Advance Repayment', 'Card Manual Adjustment In', 'Card Manual Adjustment Out'],
+    internal: ['Transfer', 'Internal Transfer', 'Main / Sub Account Transfer', 'Transfer (Copy Trading)', 'Transfer (Bot)', 'CFD Transfer'],
     earn: ['Flexible Subscription', 'Flexible Redemption', 'Fixed-Term Subscription', 'Fixed Term Redemption',
       'Dual Product Subscription', 'Dual Product Settlement'],
     bonus: ['Trial Fund', 'Bonus Redemption', 'Fortune Bonus Withdrawal', 'Fortune Fund', 'Fortune Fund Recalled',
@@ -573,31 +41,30 @@ p.small { font-size: 12.5px; color: var(--ink-2); margin: 8px 0 0; }
     conversion: ['Buy Order', 'Sell Order', 'Convert', 'Convert Small Balance', 'Futures Convert'],
     other: ['Repay']
   };
-  const LABEL_TO_CAT = {};
-  for (const [cat, labels] of Object.entries(CATEGORY_LABELS)) {
-    for (const l of labels) LABEL_TO_CAT[l.toLowerCase()] = cat;
-  }
-  // Categories that make up trading performance (net PnL).
-  const PERF_CATS = ['realized', 'spot', 'event', 'fee', 'funding', 'income'];
-  const FUTURES_LABELS = new Set(['pnl', 'futures fee', 'funding cost', 'liquidation settlement',
-    'guranteed sl fee', 'guaranteed sl fee', 'coupon position pnl', 'coupon position liquidation']);
+  var LABEL_CAT = {};
+  Object.keys(CATEGORY_LABELS).forEach(function (cat) {
+    CATEGORY_LABELS[cat].forEach(function (l) { LABEL_CAT[l.toLowerCase()] = cat; });
+  });
+  var FUTURES_LABELS = {};
+  ['PnL', 'Futures Fee', 'Funding Cost', 'Liquidation Settlement', 'Guranteed SL Fee', 'Guaranteed SL Fee',
+    'Coupon Position PnL', 'Coupon Position Liquidation'].forEach(function (l) { FUTURES_LABELS[l.toLowerCase()] = 1; });
+  var PERF = { realized: 1, spot: 1, event: 1, fee: 1, funding: 1, income: 1 };
 
   function classify(label) {
-    const cat = LABEL_TO_CAT[String(label || '').trim().toLowerCase()];
-    return cat || null;
+    return LABEL_CAT[String(label || '').trim().toLowerCase()] || null;
   }
 
-  // RFC 4180 CSV parser: quoted fields, doubled quotes, newlines inside quotes.
+  // ---- parsing ----
+
   function parseCSV(text) {
-    const rows = [];
-    let row = [], field = '', inQuotes = false;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (inQuotes) {
+    var rows = [], row = [], field = '', inQ = false;
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (inQ) {
         if (c === '"') {
-          if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false;
+          if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false;
         } else field += c;
-      } else if (c === '"' && field === '') inQuotes = true;
+      } else if (c === '"' && field === '') inQ = true;
       else if (c === ',') { row.push(field); field = ''; }
       else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
       else if (c !== '\r') field += c;
@@ -606,1447 +73,543 @@ p.small { font-size: 12.5px; color: var(--ink-2); margin: 8px 0 0; }
     return rows;
   }
 
-  function num(v) {
-    if (v == null) return null;
-    const s = String(v).trim();
-    if (EMPTY.has(s)) return null;
-    const n = parseFloat(s.replace(/,/g, ''));
-    return Number.isFinite(n) ? n : NaN;
+  function cell(v) {
+    var s = v == null ? '' : String(v).trim();
+    return EMPTY[s] ? '' : s;
   }
-  function str(v) {
-    const s = v == null ? '' : String(v).trim();
-    return EMPTY.has(s) ? '' : s;
+  function amount(v) {
+    var s = cell(v);
+    if (s === '') return 0;
+    var n = parseFloat(s.replace(/,/g, ''));
+    return isFinite(n) && /^[-+]?[\d.,]+(e[-+]?\d+)?$/i.test(s) ? n : NaN;
   }
   function parseDate(s) {
-    const m = /(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(s || ''));
-    if (!m) return null;
-    return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+    var m = /(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(s || ''));
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) : null;
   }
   function dayKey(ts) { return new Date(ts).toISOString().slice(0, 10); }
   function monthKey(ts) { return new Date(ts).toISOString().slice(0, 7); }
+  function dayStart(ts) { return Math.floor(ts / DAY) * DAY; }
   function weekKey(ts) {
-    // ISO week starting Monday, keyed by the Monday's date.
-    const d = new Date(ts);
-    const wd = (d.getUTCDay() + 6) % 7;
+    var d = new Date(ts), wd = (d.getUTCDay() + 6) % 7;
     return dayKey(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - wd));
   }
   function balanceFrom(line) {
-    const tail = line.slice(line.lastIndexOf(':') + 1).trim();
-    const n = parseFloat(tail.replace(/,/g, ''));
-    const when = /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) UTC/.exec(line);
-    return { value: Number.isFinite(n) ? n : null, at: when ? when[1] + ' UTC' : null };
+    var n = parseFloat(line.slice(line.lastIndexOf(':') + 1).replace(/,/g, ''));
+    var when = /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) UTC/.exec(line);
+    return { value: isFinite(n) ? n : null, at: when ? when[1] + ' UTC' : null };
   }
 
-  const COLUMNS = {
-    date: 'date (utc)', label: 'label', account: 'account', outAsset: 'outgoing asset',
-    outAmt: 'outgoing amount', inAsset: 'incoming asset', inAmt: 'incoming amount',
-    feeAsset: 'fee asset', feeAmt: 'fee amount', typeId: 'type id', txid: 'txid',
-    from: 'from address', to: 'to address', network: 'network', ref: 'reference id', comment: 'comment'
-  };
+  var COLS = { date: 'date (utc)', label: 'label', account: 'account', outAsset: 'outgoing asset', outAmt: 'outgoing amount',
+    inAsset: 'incoming asset', inAmt: 'incoming amount', feeAsset: 'fee asset', feeAmt: 'fee amount', typeId: 'type id',
+    txid: 'txid', network: 'network', ref: 'reference id', comment: 'comment' };
 
   function parseReport(text, fileName) {
     text = String(text || '').replace(/^﻿/, '');
-    const table = parseCSV(text);
-    const warnings = [];
-    const headerIdx = table.findIndex(r => r.length > 3 &&
-      /^date/i.test(String(r[0]).trim()) && r.some(c => String(c).trim().toLowerCase() === 'label'));
-    if (headerIdx < 0) {
+    var table = parseCSV(text), warnings = [];
+    var h = -1;
+    for (var i = 0; i < table.length && h < 0; i++) {
+      var r = table[i];
+      if (r.length > 3 && /^date/i.test(String(r[0]).trim()) &&
+        r.some(function (c) { return String(c).trim().toLowerCase() === 'label'; })) h = i;
+    }
+    if (h < 0) {
       throw new Error('No transaction header found. Expected a row starting with "Date (UTC),Label,...". ' +
         'Export the tax report from Bitunix as CSV and upload it unchanged.');
     }
-    const meta = { platform: null, exportDate: null, uid: null, period: null, opening: null, closing: null,
+    var meta = { platform: null, exportDate: null, uid: null, period: null, opening: null, closing: null,
       dataTypes: [], fileName: fileName || null };
-    for (const r of table.slice(0, headerIdx)) {
-      const line = r.join(',').trim();
-      if (!line || /^-{5,}$/.test(line)) continue;
-      let m;
+    table.slice(0, h).forEach(function (r) {
+      var line = r.join(',').trim(), m;
+      if (!line || /^-{5,}$/.test(line)) return;
       if ((m = /^Platform:\s*(.+)$/i.exec(line))) meta.platform = m[1].trim();
       else if ((m = /^Export Date:\s*(.+)$/i.exec(line))) meta.exportDate = m[1].trim();
       else if ((m = /^User UID:\s*(.+)$/i.exec(line))) meta.uid = m[1].trim();
       else if ((m = /^Period:\s*(.+)$/i.exec(line))) meta.period = m[1].trim();
       else if (/^Data Types:/i.test(line)) {
-        meta.dataTypes = r.join(',').split(/\r?\n/).slice(1).map(s => s.trim()).filter(Boolean);
+        meta.dataTypes = line.split(/\r?\n/).slice(1).map(function (s) { return s.trim(); }).filter(Boolean);
       } else if (/^Opening Balance/i.test(line)) meta.opening = balanceFrom(line);
       else if (/^Closing Balance/i.test(line)) meta.closing = balanceFrom(line);
-    }
-    const header = table[headerIdx].map(h => String(h).trim().toLowerCase());
-    const col = {};
-    for (const [k, name] of Object.entries(COLUMNS)) col[k] = header.indexOf(name);
-    for (const k of ['date', 'label', 'outAsset', 'outAmt', 'inAsset', 'inAmt']) {
-      if (col[k] < 0) throw new Error('Missing column "' + COLUMNS[k] + '" in the CSV header.');
-    }
-    const get = (r, k) => (col[k] >= 0 ? r[col[k]] : '');
-    const rows = [];
-    table.slice(headerIdx + 1).forEach((r, i) => {
-      if (r.every(c => String(c).trim() === '')) return;
-      const line = headerIdx + i + 2;
-      const ts = parseDate(get(r, 'date'));
+    });
+    var header = table[h].map(function (x) { return String(x).trim().toLowerCase(); });
+    var col = {};
+    Object.keys(COLS).forEach(function (k) { col[k] = header.indexOf(COLS[k]); });
+    ['date', 'label', 'outAsset', 'outAmt', 'inAsset', 'inAmt'].forEach(function (k) {
+      if (col[k] < 0) throw new Error('Missing column "' + COLS[k] + '" in the CSV header.');
+    });
+    function get(r, k) { return col[k] >= 0 ? r[col[k]] : ''; }
+    var rows = [];
+    table.slice(h + 1).forEach(function (r, i) {
+      if (r.every(function (c) { return String(c).trim() === ''; })) return;
+      var line = h + i + 2, ts = parseDate(get(r, 'date'));
       if (ts == null) { warnings.push('Line ' + line + ': unreadable date "' + get(r, 'date') + '", row skipped.'); return; }
-      const outAmt = num(get(r, 'outAmt')), inAmt = num(get(r, 'inAmt')), feeAmt = num(get(r, 'feeAmt'));
-      if ([outAmt, inAmt, feeAmt].some(Number.isNaN)) {
-        warnings.push('Line ' + line + ': unreadable amount, row skipped.'); return;
-      }
+      var o = amount(get(r, 'outAmt')), n = amount(get(r, 'inAmt')), f = amount(get(r, 'feeAmt'));
+      if (isNaN(o) || isNaN(n) || isNaN(f)) { warnings.push('Line ' + line + ': unreadable amount, row skipped.'); return; }
       rows.push({
-        ts, line, label: str(get(r, 'label')), account: str(get(r, 'account')) || 'Main',
-        outAsset: outAmt ? str(get(r, 'outAsset')).toUpperCase() : '', outAmt: outAmt || 0,
-        inAsset: inAmt ? str(get(r, 'inAsset')).toUpperCase() : '', inAmt: inAmt || 0,
-        feeAsset: feeAmt ? str(get(r, 'feeAsset')).toUpperCase() : '', feeAmt: feeAmt || 0,
-        typeId: str(get(r, 'typeId')), txid: str(get(r, 'txid')), network: str(get(r, 'network')),
-        ref: str(get(r, 'ref')), comment: str(get(r, 'comment')),
-        key: r.map(c => String(c).trim()).join('␟')
+        ts: ts, line: line, label: cell(get(r, 'label')), account: cell(get(r, 'account')) || 'Main',
+        outAsset: o ? cell(get(r, 'outAsset')).toUpperCase() : '', outAmt: o,
+        inAsset: n ? cell(get(r, 'inAsset')).toUpperCase() : '', inAmt: n,
+        feeAsset: f ? cell(get(r, 'feeAsset')).toUpperCase() : '', feeAmt: f,
+        typeId: cell(get(r, 'typeId')), txid: cell(get(r, 'txid')), network: cell(get(r, 'network')),
+        ref: cell(get(r, 'ref')), comment: cell(get(r, 'comment')),
+        key: r.map(function (c) { return String(c).trim(); }).join(SEP)
       });
     });
-    // Exports can be newest-first; normalize to oldest-first while keeping same-minute order
-    // (a closing fee row sits just before its PnL row in chronological exports).
     if (rows.length > 1 && rows[0].ts > rows[rows.length - 1].ts) rows.reverse();
-    return { meta, rows, warnings };
+    return { meta: meta, rows: rows, warnings: warnings };
   }
 
-  // Merge several reports. Identical rows that appear in more than one file count once;
-  // identical rows inside one file are kept (they can be genuine, e.g. two transfers).
   function mergeReports(reports) {
-    const maxCount = new Map(), firstRow = new Map();
-    const warnings = [];
-    reports.forEach((rep, fileIdx) => {
-      const counts = new Map();
-      for (const r of rep.rows) {
-        counts.set(r.key, (counts.get(r.key) || 0) + 1);
-        if (!firstRow.has(r.key)) firstRow.set(r.key, []);
-      }
-      for (const [k, c] of counts) maxCount.set(k, Math.max(maxCount.get(k) || 0, c));
-      rep.warnings.forEach(w => warnings.push((rep.meta.fileName ? rep.meta.fileName + ': ' : '') + w));
-      rep.rows.forEach((r, i) => { r._order = fileIdx * 1e7 + i; });
+    var maxCount = {}, warnings = [], dupes = 0;
+    reports.forEach(function (rep, fi) {
+      var counts = {};
+      rep.rows.forEach(function (r, i) {
+        counts[r.key] = (counts[r.key] || 0) + 1;
+        r._order = fi * 1e7 + i;
+      });
+      Object.keys(counts).forEach(function (k) { maxCount[k] = Math.max(maxCount[k] || 0, counts[k]); });
+      rep.warnings.forEach(function (w) { warnings.push((rep.meta.fileName ? rep.meta.fileName + ': ' : '') + w); });
     });
-    const used = new Map(), rows = [];
-    let dupes = 0;
-    reports.forEach(rep => {
-      for (const r of rep.rows) {
-        const n = used.get(r.key) || 0;
-        if (n < maxCount.get(r.key)) { used.set(r.key, n + 1); rows.push(r); } else dupes++;
-      }
+    var used = {}, rows = [];
+    reports.forEach(function (rep) {
+      rep.rows.forEach(function (r) {
+        var n = used[r.key] || 0;
+        if (n < maxCount[r.key]) { used[r.key] = n + 1; rows.push(r); } else dupes++;
+      });
     });
-    rows.sort((a, b) => a.ts - b.ts || a._order - b._order);
-    rows.forEach((r, i) => { r.seq = i; });
-    const metas = reports.map(r => r.meta);
-    const meta = Object.assign({}, metas[0] || {});
-    meta.fileNames = metas.map(m => m.fileName).filter(Boolean);
-    meta.closing = metas.map(m => m.closing).filter(c => c && c.value != null)
-      .sort((a, b) => String(b.at).localeCompare(String(a.at)))[0] || null;
-    meta.opening = metas.map(m => m.opening).filter(c => c && c.value != null)
-      .sort((a, b) => String(a.at).localeCompare(String(b.at)))[0] || null;
-    return { meta, rows, warnings, duplicates: dupes };
+    rows.sort(function (a, b) { return a.ts - b.ts || a._order - b._order; });
+    rows.forEach(function (r, i) { r.seq = i; });
+    var metas = reports.map(function (r) { return r.meta; });
+    var meta = Object.assign({}, metas[0]);
+    meta.fileNames = metas.map(function (m) { return m.fileName; }).filter(Boolean);
+    var withBal = function (k) { return metas.map(function (m) { return m[k]; }).filter(function (b) { return b && b.value != null; }); };
+    meta.closing = withBal('closing').sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); })[0] || null;
+    meta.opening = withBal('opening').sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); })[0] || null;
+    return { meta: meta, rows: rows, warnings: warnings, duplicates: dupes };
   }
 
-  // Turn rows into USDT-valued events. Non-stable assets are carried at average cost;
-  // selling them for stables realizes spot PnL.
+  // ---- model: rows -> USDT-valued events and trades ----
+
   function buildModel(merged) {
-    const rows = merged.rows;
-    const warnings = merged.warnings.slice();
-    const unknown = new Map();
-    // Reference prices for non-stable assets, from conversions against a stable.
-    const priceObs = {};
-    for (const r of rows) {
-      if (!r.inAsset || !r.outAsset) continue;
-      if (STABLES.has(r.outAsset) && !STABLES.has(r.inAsset)) (priceObs[r.inAsset] ||= []).push([r.ts, r.outAmt / r.inAmt]);
-      if (STABLES.has(r.inAsset) && !STABLES.has(r.outAsset)) (priceObs[r.outAsset] ||= []).push([r.ts, r.inAmt / r.outAmt]);
-    }
-    const priceAt = (asset, ts) => {
-      const obs = priceObs[asset];
-      if (!obs) return null;
-      let best = null, bestGap = Infinity;
-      for (const [t, p] of obs) {
-        // Prefer the first conversion at or after ts (a deposit converted later), else the nearest one.
-        const gap = t >= ts ? t - ts : (ts - t) * 2 + 1;
-        if (gap < bestGap) { bestGap = gap; best = p; }
-      }
+    var rows = merged.rows, warnings = merged.warnings.slice(), unknown = {};
+    var obs = {};
+    rows.forEach(function (r) {
+      if (!r.inAsset || !r.outAsset) return;
+      if (STABLES[r.outAsset] && !STABLES[r.inAsset]) (obs[r.inAsset] = obs[r.inAsset] || []).push([r.ts, r.outAmt / r.inAmt]);
+      if (STABLES[r.inAsset] && !STABLES[r.outAsset]) (obs[r.outAsset] = obs[r.outAsset] || []).push([r.ts, r.inAmt / r.outAmt]);
+    });
+    function priceAt(asset, ts) {
+      var list = obs[asset], best = null, gap = Infinity;
+      if (!list) return null;
+      list.forEach(function (o) {
+        var g = o[0] >= ts ? o[0] - ts : (ts - o[0]) * 2 + 1;
+        if (g < gap) { gap = g; best = o[1]; }
+      });
       return best;
-    };
-    const holdings = {};
-    const hold = a => (holdings[a] ||= { qty: 0, cost: 0, bought: false });
-    const unvalued = {};
-    const events = [], trades = [];
-    const addEvent = (r, cat, value, extra) => {
-      const e = Object.assign({ ts: r.ts, seq: r.seq, cat, value, label: r.label, account: r.account,
-        market: null, row: r }, extra || {});
+    }
+    var holdings = {}, unvalued = {}, events = [], trades = [];
+    function hold(a) { return holdings[a] || (holdings[a] = { qty: 0, cost: 0, bought: false }); }
+    function push(r, cat, value, extra) {
+      var e = Object.assign({ ts: r.ts, seq: r.seq, cat: cat, value: value, label: r.label, account: r.account, market: null, row: r }, extra);
       events.push(e);
       return e;
-    };
-    // Value a single-asset movement in USDT. Incoming non-stables enter at a reference price;
-    // outgoing ones leave at average cost.
-    const valueLeg = (asset, amt, ts) => {
-      if (STABLES.has(asset)) return amt;
-      const h = hold(asset);
+    }
+    // Value a one-sided movement of `amt` (signed) of `asset` in USDT.
+    function valueLeg(asset, amt, ts) {
+      if (STABLES[asset]) return amt;
+      var h = hold(asset), p = priceAt(asset, ts);
       if (amt > 0) {
-        const p = priceAt(asset, ts);
-        if (p == null) (unvalued[asset] ||= { asset, qty: 0 }).qty += amt;
-        const v = p == null ? 0 : amt * p;
+        if (p == null) (unvalued[asset] = unvalued[asset] || { asset: asset, qty: 0 }).qty += amt;
+        var v = p == null ? 0 : amt * p;
         h.qty += amt; h.cost += v;
         return v;
       }
-      const q = -amt;
-      const avg = h.qty > 1e-12 ? h.cost / h.qty : (priceAt(asset, ts) || 0);
-      const v = Math.min(q, h.qty) * avg + Math.max(0, q - h.qty) * (priceAt(asset, ts) || 0);
-      h.qty = Math.max(0, h.qty - q); h.cost = h.qty > 1e-12 ? h.cost - Math.min(v, h.cost) : 0;
-      return -v;
-    };
+      var q = -amt, avg = h.qty > 1e-12 ? h.cost / h.qty : (p || 0);
+      var covered = Math.min(q, h.qty), val = covered * avg + (q - covered) * (p || 0);
+      h.qty = Math.max(0, h.qty - q);
+      h.cost = h.qty > 1e-12 ? Math.max(0, h.cost - covered * avg) : 0;
+      return -val;
+    }
 
-    for (const r of rows) {
-      let cat = classify(r.label);
+    rows.forEach(function (r) {
+      var cat = classify(r.label);
       if (!cat) {
         cat = 'other';
-        unknown.set(r.label || '(blank)', (unknown.get(r.label || '(blank)') || 0) + 1);
+        var k = r.label || '(blank)';
+        unknown[k] = (unknown[k] || 0) + 1;
       }
-      const isFut = FUTURES_LABELS.has(r.label.toLowerCase());
-      const twoLeg = r.inAsset && r.outAsset;
-      if (cat === 'conversion' || (twoLeg && cat !== 'realized')) {
-        const outStable = STABLES.has(r.outAsset), inStable = STABLES.has(r.inAsset);
-        if (twoLeg && outStable && !inStable) {
-          const h = hold(r.inAsset);
-          h.qty += r.inAmt; h.cost += r.outAmt; h.bought = true;
-          addEvent(r, 'conversion', 0, { detail: 'Bought ' + r.inAsset });
-        } else if (twoLeg && !outStable && inStable) {
-          const h = hold(r.outAsset);
-          const wasBought = h.bought;
-          const basis = -valueLeg(r.outAsset, -r.outAmt, r.ts);
-          const pnl = r.inAmt - basis;
-          if (wasBought) {
-            addEvent(r, 'spot', pnl, { market: 'spot' });
-            trades.push({ ts: r.ts, seq: r.seq, market: 'spot', label: r.label + ' ' + r.outAsset,
-              gross: pnl, fee: 0, net: pnl, account: r.account, ref: r.ref, row: r });
-          } else {
-            // Selling a deposited coin: proceeds vs. its reference value, not a trade.
-            addEvent(r, 'spot', pnl, { market: 'spot', detail: 'Converted deposit' });
-          }
-        } else if (twoLeg && outStable && inStable) {
-          addEvent(r, 'spot', r.inAmt - r.outAmt, { market: 'spot' });
-        } else if (twoLeg) {
-          // Crypto to crypto: carry the cost basis across.
-          const basis = -valueLeg(r.outAsset, -r.outAmt, r.ts);
-          const h = hold(r.inAsset);
-          h.qty += r.inAmt; h.cost += basis; h.bought = h.bought || hold(r.outAsset).bought;
-          addEvent(r, 'conversion', 0, { detail: r.outAsset + ' → ' + r.inAsset });
+      var fut = !!FUTURES_LABELS[r.label.toLowerCase()];
+      var two = r.inAsset && r.outAsset;
+      if (cat === 'conversion' || (two && cat !== 'realized')) {
+        var outS = !!STABLES[r.outAsset], inS = !!STABLES[r.inAsset];
+        if (two && outS && !inS) {
+          var hb = hold(r.inAsset);
+          hb.qty += r.inAmt; hb.cost += r.outAmt; hb.bought = true;
+          push(r, 'conversion', 0, { detail: 'Bought ' + r.inAsset });
+        } else if (two && !outS && inS) {
+          var hs = hold(r.outAsset), bought = hs.bought;
+          var basis = -valueLeg(r.outAsset, -r.outAmt, r.ts), pnl = r.inAmt - basis;
+          if (bought) {
+            push(r, 'spot', pnl, { market: 'spot' });
+            trades.push({ ts: r.ts, seq: r.seq, market: 'spot', label: r.label + ' ' + r.outAsset, gross: pnl, fee: 0, net: pnl,
+              account: r.account, ref: r.ref });
+          } else push(r, 'spot', pnl, { market: 'spot', detail: 'Converted deposit' });
+        } else if (two && outS && inS) {
+          push(r, 'spot', r.inAmt - r.outAmt, { market: 'spot' });
+        } else if (two) {
+          var bs = -valueLeg(r.outAsset, -r.outAmt, r.ts), hi = hold(r.inAsset);
+          hi.qty += r.inAmt; hi.cost += bs;
+          push(r, 'conversion', 0, { detail: r.outAsset + ' → ' + r.inAsset });
         } else {
-          const asset = r.inAsset || r.outAsset;
-          addEvent(r, 'conversion', valueLeg(asset, r.inAsset ? r.inAmt : -r.outAmt, r.ts), { asset });
+          var a0 = r.inAsset || r.outAsset;
+          push(r, 'conversion', valueLeg(a0, r.inAsset ? r.inAmt : -r.outAmt, r.ts), { asset: a0 });
         }
       } else {
-        const asset = r.inAsset || r.outAsset;
-        const amt = (r.inAmt || 0) - (r.outAmt || 0);
+        var asset = r.inAsset || r.outAsset, qty = r.inAmt - r.outAmt;
         if (asset) {
-          const v = valueLeg(asset, amt, r.ts);
-          const e = addEvent(r, cat, v, { asset, qty: amt, market: isFut ? 'futures' : null });
+          var v = valueLeg(asset, qty, r.ts);
+          var e = push(r, cat, v, { asset: asset, qty: qty, market: fut ? 'futures' : null });
           if (cat === 'cashflow') e.flow = v >= 0 ? 'in' : 'out';
         }
       }
       if (r.feeAmt) {
-        const v = valueLeg(r.feeAsset || 'USDT', -Math.abs(r.feeAmt), r.ts);
-        addEvent(r, 'fee', v, { market: isFut ? 'futures' : 'spot', detail: 'Fee column' });
+        var fv = valueLeg(r.feeAsset || 'USDT', -Math.abs(r.feeAmt), r.ts);
+        push(r, 'fee', fv, { market: fut ? 'futures' : 'spot', detail: 'Fee column' });
       }
-    }
+    });
 
-    // Closed futures trades: each realized row, with the nearest unclaimed fee row
-    // in the same minute (scanning back) as its closing fee.
-    const claimed = new Set();
-    const feeEventsByTs = new Map();
-    for (const e of events) {
-      if (e.cat === 'fee' && e.market === 'futures' && !e.detail) {
-        if (!feeEventsByTs.has(e.ts)) feeEventsByTs.set(e.ts, []);
-        feeEventsByTs.get(e.ts).push(e);
+    // Futures trades: each realized event, paired with the nearest earlier unclaimed fee in the same minute.
+    var feesByTs = {}, claimed = new Set();
+    events.forEach(function (e) {
+      if (e.cat === 'fee' && e.market === 'futures' && !e.detail) (feesByTs[e.ts] = feesByTs[e.ts] || []).push(e);
+    });
+    events.forEach(function (e) {
+      if (e.cat !== 'realized') return;
+      var cands = (feesByTs[e.ts] || []).filter(function (f) { return !claimed.has(f) && f.seq < e.seq && f.account === e.account; });
+      var fee = 0;
+      if (cands.length) {
+        var f = cands.reduce(function (a, b) { return b.seq > a.seq ? b : a; });
+        claimed.add(f); f.closing = true; fee = f.value;
       }
-    }
-    for (const e of events) {
-      if (e.cat !== 'realized') continue;
-      const cands = (feeEventsByTs.get(e.ts) || []).filter(f => !claimed.has(f) && f.seq < e.seq && f.account === e.account);
-      let fee = 0;
-      if (cands.length) { const f = cands[cands.length - 1]; claimed.add(f); fee = f.value; f.closing = true; }
-      trades.push({ ts: e.ts, seq: e.seq, market: 'futures', label: e.label, gross: e.value, fee, net: e.value + fee,
-        account: e.account, ref: e.row.ref, row: e.row });
-    }
-    trades.sort((a, b) => a.ts - b.ts || a.seq - b.seq);
-    events.sort((a, b) => a.ts - b.ts || a.seq - b.seq);
+      trades.push({ ts: e.ts, seq: e.seq, market: 'futures', label: e.label, gross: e.value, fee: fee, net: e.value + fee,
+        account: e.account, ref: e.row.ref });
+    });
+    trades.sort(function (a, b) { return a.ts - b.ts || a.seq - b.seq; });
+    events.sort(function (a, b) { return a.ts - b.ts || a.seq - b.seq; });
 
-    for (const [label, n] of unknown) warnings.push('Unknown label "' + label + '" on ' + n + ' row(s). Counted as Other, outside PnL.');
-    for (const u of Object.values(unvalued)) {
-      warnings.push(u.qty.toPrecision(6) + ' ' + u.asset + ' has no USDT conversion in the file, so it is valued at 0.');
-    }
-    const accounts = [...new Set(rows.map(r => r.account))];
-    const otherAssets = Object.entries(holdings).filter(([, h]) => h.qty > 1e-12)
-      .map(([asset, h]) => ({ asset, qty: h.qty, cost: h.cost }));
-    return { meta: merged.meta, rows, events, trades, warnings, accounts, otherAssets,
-      unvalued: Object.values(unvalued), duplicates: merged.duplicates || 0 };
+    Object.keys(unknown).forEach(function (l) {
+      warnings.push('Unknown label "' + l + '" on ' + unknown[l] + ' row(s). Counted as Other, outside PnL.');
+    });
+    var unv = Object.keys(unvalued).map(function (k) { return unvalued[k]; });
+    unv.forEach(function (u) { warnings.push(u.qty.toPrecision(6) + ' ' + u.asset + ' has no USDT conversion in the file, so it is valued at 0.'); });
+    var accounts = [];
+    rows.forEach(function (r) { if (accounts.indexOf(r.account) < 0) accounts.push(r.account); });
+    var other = Object.keys(holdings).filter(function (a) { return holdings[a].qty > 1e-12; })
+      .map(function (a) { return { asset: a, qty: holdings[a].qty, cost: holdings[a].cost }; });
+    return { meta: merged.meta, rows: rows, events: events, trades: trades, warnings: warnings, accounts: accounts,
+      otherAssets: other, unvalued: unv, duplicates: merged.duplicates || 0 };
   }
 
   function loadReports(files) {
-    // files: [{name, text}]
-    const reps = files.map(f => parseReport(f.text, f.name));
-    return buildModel(mergeReports(reps));
+    return buildModel(mergeReports(files.map(function (f) { return parseReport(f.text, f.name); })));
   }
 
-  // ---------- analytics ----------
-  const sum = a => a.reduce((s, x) => s + x, 0);
-  const mean = a => (a.length ? sum(a) / a.length : null);
-  function std(a) {
+  // ---- analytics ----
+
+  function sum(a) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i]; return s; }
+  function mean(a) { return a.length ? sum(a) / a.length : null; }
+  function sampleStd(a) {
     if (a.length < 2) return null;
-    const m = mean(a);
-    return Math.sqrt(sum(a.map(x => (x - m) ** 2)) / (a.length - 1));
+    var m = mean(a);
+    return Math.sqrt(sum(a.map(function (x) { return (x - m) * (x - m); })) / (a.length - 1));
   }
-  const clamp01 = x => Math.max(0, Math.min(1, x));
+  function clamp01(x) { return Math.max(0, Math.min(1, x)); }
 
   function tradeStats(trades) {
-    const nets = trades.map(t => t.net);
-    const wins = nets.filter(x => x > 0), losses = nets.filter(x => x < 0);
-    const grossWin = sum(wins), grossLoss = sum(losses);
-    let curW = 0, curL = 0, maxW = 0, maxL = 0;
-    for (const x of nets) {
-      if (x > 0) { curW++; curL = 0; } else if (x < 0) { curL++; curW = 0; } else { curW = 0; curL = 0; }
-      maxW = Math.max(maxW, curW); maxL = Math.max(maxL, curL);
-    }
-    const decided = wins.length + losses.length;
-    const avgWin = mean(wins), avgLoss = mean(losses);
+    var nets = trades.map(function (t) { return t.net; });
+    var wins = nets.filter(function (x) { return x > 0; }), losses = nets.filter(function (x) { return x < 0; });
+    var gw = sum(wins), gl = sum(losses), cw = 0, cl = 0, mw = 0, ml = 0;
+    nets.forEach(function (x) {
+      if (x > 0) { cw++; cl = 0; } else if (x < 0) { cl++; cw = 0; } else { cw = 0; cl = 0; }
+      mw = Math.max(mw, cw); ml = Math.max(ml, cl);
+    });
+    var decided = wins.length + losses.length, aw = mean(wins), al = mean(losses);
     return {
       count: trades.length, wins: wins.length, losses: losses.length, breakeven: trades.length - decided,
-      winRate: decided ? wins.length / decided : null,
-      grossWin, grossLoss, net: sum(nets),
-      avgWin, avgLoss,
-      payoff: avgWin != null && avgLoss ? avgWin / Math.abs(avgLoss) : null,
-      profitFactor: grossLoss ? grossWin / Math.abs(grossLoss) : (grossWin > 0 ? Infinity : null),
-      expectancy: mean(nets),
-      largestWin: wins.length ? Math.max(...wins) : null,
-      largestLoss: losses.length ? Math.min(...losses) : null,
-      maxWinStreak: maxW, maxLossStreak: maxL,
-      closeFees: sum(trades.map(t => t.fee))
+      winRate: decided ? wins.length / decided : null, grossWin: gw, grossLoss: gl, net: sum(nets),
+      avgWin: aw, avgLoss: al, payoff: aw != null && al ? aw / Math.abs(al) : null,
+      profitFactor: gl ? gw / Math.abs(gl) : (gw > 0 ? Infinity : null),
+      expectancy: mean(nets), largestWin: wins.length ? Math.max.apply(null, wins) : null,
+      largestLoss: losses.length ? Math.min.apply(null, losses) : null,
+      maxWinStreak: mw, maxLossStreak: ml, closeFees: sum(trades.map(function (t) { return t.fee; }))
     };
   }
 
-  // opts: {from, to (ms, inclusive day bounds), account, market, includeFees, includeFunding, includeIncome}
   function analyze(model, opts) {
-    opts = Object.assign({ from: null, to: null, account: 'all', market: 'all',
-      includeFees: true, includeFunding: true, includeIncome: true }, opts || {});
-    const acctOk = e => opts.account === 'all' || e.account === opts.account;
-    const isPerf = e => PERF_CATS.includes(e.cat) && (opts.market === 'all' || e.market === opts.market);
-    const counted = e => isPerf(e) &&
-      !(e.cat === 'fee' && !opts.includeFees) && !(e.cat === 'funding' && !opts.includeFunding) &&
-      !(e.cat === 'income' && !opts.includeIncome);
-
-    const all = model.events.filter(acctOk);
+    opts = Object.assign({ from: null, to: null, account: 'all', market: 'all', includeFees: true, includeFunding: true, includeIncome: true }, opts);
+    var all = model.events.filter(function (e) { return opts.account === 'all' || e.account === opts.account; });
     if (!all.length) return null;
-    const firstTs = all[0].ts, lastTs = all[all.length - 1].ts;
-    const dayStart = ts => Math.floor(ts / DAY_MS) * DAY_MS;
-    const from = opts.from != null ? dayStart(opts.from) : dayStart(firstTs);
-    const to = opts.to != null ? dayStart(opts.to) + DAY_MS - 1 : dayStart(lastTs) + DAY_MS - 1;
-    const inRange = ts => ts >= from && ts <= to;
+    var firstTs = all[0].ts, lastTs = all[all.length - 1].ts;
+    var from = dayStart(opts.from != null ? opts.from : firstTs);
+    var to = dayStart(opts.to != null ? opts.to : lastTs) + DAY - 1;
+    var inRange = function (ts) { return ts >= from && ts <= to; };
+    var isPerf = function (e) { return PERF[e.cat] && (opts.market === 'all' || e.market === opts.market); };
+    var counted = function (e) {
+      return isPerf(e) && !(e.cat === 'fee' && !opts.includeFees) && !(e.cat === 'funding' && !opts.includeFunding) &&
+        !(e.cat === 'income' && !opts.includeIncome);
+    };
 
-    // Book equity before the range.
-    let equity = 0;
-    for (const e of all) { if (e.ts < from) equity += e.value; else break; }
-    const equityStart = equity;
-
-    const ev = all.filter(e => inRange(e.ts));
-    const byCat = {};
-    for (const e of ev) byCat[e.cat] = (byCat[e.cat] || 0) + e.value;
-    const perfEv = ev.filter(isPerf);
-    const catSum = (cat, m) => sum(perfEv.filter(e => e.cat === cat && (!m || e.market === m)).map(e => e.value));
-    const fundingRecv = sum(perfEv.filter(e => e.cat === 'funding' && e.value > 0).map(e => e.value));
-    const fundingPaid = sum(perfEv.filter(e => e.cat === 'funding' && e.value < 0).map(e => e.value));
-    const flows = ev.filter(e => e.cat === 'cashflow');
-    const deposits = sum(flows.filter(e => e.value > 0).map(e => e.value));
-    const withdrawals = sum(flows.filter(e => e.value < 0).map(e => e.value));
-    const totals = {
-      realized: catSum('realized'), spot: catSum('spot'), event: catSum('event'),
-      fees: catSum('fee'), funding: catSum('funding'), fundingReceived: fundingRecv, fundingPaid,
-      income: catSum('income'), deposits, withdrawals, netCapital: deposits + withdrawals,
+    var equityStart = 0;
+    all.forEach(function (e) { if (e.ts < from) equityStart += e.value; });
+    var ev = all.filter(function (e) { return inRange(e.ts); });
+    var perf = ev.filter(isPerf);
+    var byCat = {};
+    ev.forEach(function (e) { byCat[e.cat] = (byCat[e.cat] || 0) + e.value; });
+    var catSum = function (c) { return sum(perf.filter(function (e) { return e.cat === c; }).map(function (e) { return e.value; })); };
+    var fundEv = perf.filter(function (e) { return e.cat === 'funding'; });
+    var flows = ev.filter(function (e) { return e.cat === 'cashflow'; });
+    var totals = {
+      realized: catSum('realized'), spot: catSum('spot'), event: catSum('event'), fees: catSum('fee'), funding: catSum('funding'),
+      fundingReceived: sum(fundEv.filter(function (e) { return e.value > 0; }).map(function (e) { return e.value; })),
+      fundingPaid: sum(fundEv.filter(function (e) { return e.value < 0; }).map(function (e) { return e.value; })),
+      income: catSum('income'),
+      deposits: sum(flows.filter(function (e) { return e.value > 0; }).map(function (e) { return e.value; })),
+      withdrawals: sum(flows.filter(function (e) { return e.value < 0; }).map(function (e) { return e.value; })),
       internal: byCat.internal || 0, earn: byCat.earn || 0, bonus: byCat.bonus || 0,
       other: (byCat.other || 0) + (byCat.conversion || 0)
     };
+    totals.netCapital = totals.deposits + totals.withdrawals;
     totals.gross = totals.realized + totals.spot + totals.event;
-    totals.net = sum(perfEv.filter(counted).map(e => e.value));
+    totals.net = sum(perf.filter(counted).map(function (e) { return e.value; }));
     totals.equityStart = equityStart;
-    totals.equityEnd = equityStart + sum(ev.map(e => e.value));
-    const capitalBase = equityStart + deposits;
-    totals.roi = capitalBase > 0 ? totals.net / capitalBase : null;
+    totals.equityEnd = equityStart + sum(ev.map(function (e) { return e.value; }));
+    var base = equityStart + totals.deposits;
+    totals.roi = base > 0 ? totals.net / base : null;
 
-    const trades = model.trades.filter(t => inRange(t.ts) && (opts.account === 'all' || t.account === opts.account) &&
-      (opts.market === 'all' || t.market === opts.market));
-    const stats = tradeStats(trades);
+    var trades = model.trades.filter(function (t) {
+      return inRange(t.ts) && (opts.account === 'all' || t.account === opts.account) && (opts.market === 'all' || t.market === opts.market);
+    });
+    var stats = tradeStats(trades);
 
-    // Event-level curves (cumulative net and gross) and drawdown on cumulative net.
-    const curve = [];
-    let cumNet = 0, cumGross = 0, peak = 0, maxDD = 0, maxDDAt = null, peakAt = from;
-    curve.push({ ts: from, net: 0, gross: 0, dd: 0 });
-    for (const e of perfEv) {
+    // Equity curve (cumulative net and gross) with drawdown from the running peak (starts at 0).
+    var curve = [{ ts: from, net: 0, gross: 0, dd: 0 }], cumNet = 0, cumGross = 0, peak = 0, maxDD = 0, maxDDAt = null;
+    perf.forEach(function (e) {
       if (counted(e)) cumNet += e.value;
       if (e.cat === 'realized' || e.cat === 'spot' || e.cat === 'event') cumGross += e.value;
-      if (cumNet > peak) { peak = cumNet; peakAt = e.ts; }
-      const dd = cumNet - peak;
+      if (cumNet > peak) peak = cumNet;
+      var dd = cumNet - peak;
       if (dd < maxDD) { maxDD = dd; maxDDAt = e.ts; }
-      curve.push({ ts: e.ts, net: cumNet, gross: cumGross, dd });
-    }
+      curve.push({ ts: e.ts, net: cumNet, gross: cumGross, dd: dd });
+    });
 
-    // Daily series across every calendar day in range.
-    const days = [];
-    const dayIdx = new Map();
-    const lastDay = Math.min(to, dayStart(Math.max(lastTs, from)) + DAY_MS - 1);
-    for (let d = from; d <= lastDay; d += DAY_MS) {
-      const o = { ts: d, day: dayKey(d), net: 0, realized: 0, fees: 0, funding: 0, income: 0, spot: 0, event: 0,
-        flows: 0, trades: 0, wins: 0, losses: 0, equityStart: 0, equityEnd: 0, cumNet: 0 };
-      dayIdx.set(o.day, o); days.push(o);
+    // Daily series, one row per calendar day.
+    var lastDay = Math.min(dayStart(to), dayStart(Math.max(lastTs, from)));
+    var days = [], byDay = {};
+    for (var d = from; d <= lastDay; d += DAY) {
+      var o = { ts: d, day: dayKey(d), net: 0, realized: 0, fees: 0, funding: 0, income: 0, spot: 0, event: 0, flows: 0,
+        trades: 0, wins: 0, losses: 0, equityStart: 0, equityEnd: 0, cumNet: 0, ret: null };
+      days.push(o); byDay[o.day] = o;
     }
-    let eq = equityStart;
-    let ei = 0;
-    let cum = 0;
-    for (const d of days) {
-      d.equityStart = eq;
-      while (ei < ev.length && dayKey(ev[ei].ts) === d.day) {
-        const e = ev[ei++];
+    var eq = equityStart, ei = 0, cum = 0;
+    days.forEach(function (dd) {
+      dd.equityStart = eq;
+      while (ei < ev.length && dayKey(ev[ei].ts) === dd.day) {
+        var e = ev[ei++];
         eq += e.value;
-        if (e.cat === 'cashflow') d.flows += e.value;
+        if (e.cat === 'cashflow') dd.flows += e.value;
         if (!isPerf(e)) continue;
-        if (counted(e)) d.net += e.value;
-        if (e.cat === 'realized') d.realized += e.value;
-        else if (e.cat === 'fee') d.fees += e.value;
-        else if (e.cat === 'funding') d.funding += e.value;
-        else if (e.cat === 'income') d.income += e.value;
-        else if (e.cat === 'spot') d.spot += e.value;
-        else if (e.cat === 'event') d.event += e.value;
+        if (counted(e)) dd.net += e.value;
+        var key = { realized: 'realized', fee: 'fees', funding: 'funding', income: 'income', spot: 'spot', event: 'event' }[e.cat];
+        dd[key] += e.value;
       }
-      d.equityEnd = eq;
-      cum += d.net; d.cumNet = cum;
-    }
-    for (const t of trades) {
-      const d = dayIdx.get(dayKey(t.ts));
-      if (!d) continue;
-      d.trades++; if (t.net > 0) d.wins++; else if (t.net < 0) d.losses++;
-    }
+      dd.equityEnd = eq; cum += dd.net; dd.cumNet = cum;
+    });
+    trades.forEach(function (t) {
+      var dd = byDay[dayKey(t.ts)];
+      if (!dd) return;
+      dd.trades++;
+      if (t.net > 0) dd.wins++; else if (t.net < 0) dd.losses++;
+    });
 
-    // Daily returns on start-of-day equity (time-weighted, so deposits don't count as gains).
-    const returns = [];
-    let idx = 1, idxPeak = 1, maxDDPct = 0;
-    for (const d of days) {
-      const base = d.equityStart + Math.max(0, d.flows);
-      if (base <= 1e-9) { d.ret = null; continue; }
-      d.ret = d.net / base;
-      returns.push(d.ret);
-      idx *= 1 + d.ret;
-      idxPeak = Math.max(idxPeak, idx);
+    // Time-weighted returns on start-of-day balance, so deposits are not gains.
+    var rets = [], idx = 1, idxPeak = 1, maxDDPct = 0;
+    days.forEach(function (dd) {
+      var b = dd.equityStart + Math.max(0, dd.flows);
+      if (b <= 1e-9) return;
+      dd.ret = dd.net / b; rets.push(dd.ret);
+      idx *= 1 + dd.ret; idxPeak = Math.max(idxPeak, idx);
       maxDDPct = Math.min(maxDDPct, idx / idxPeak - 1);
-      d.twr = idx - 1;
-    }
-    const rStd = std(returns);
-    const downside = returns.length > 1 ? Math.sqrt(sum(returns.map(r => Math.min(0, r) ** 2)) / returns.length) : null;
-    const rMean = mean(returns);
-    const activeDays = days.filter(d => d.net !== 0 || d.trades);
-    const tradingDays = days.filter(d => d.trades);
-    const green = tradingDays.filter(d => d.net > 0).length;
-    const risk = {
-      maxDD, maxDDAt, peakAt, maxDDPct, twr: idx - 1,
+    });
+    var rStd = sampleStd(rets), rMean = mean(rets);
+    var down = rets.length > 1 ? Math.sqrt(sum(rets.map(function (x) { return Math.min(x, 0) * Math.min(x, 0); })) / rets.length) : null;
+    var active = days.filter(function (x) { return x.net !== 0 || x.trades > 0; });
+    var tDays = days.filter(function (x) { return x.trades > 0; });
+    var green = tDays.filter(function (x) { return x.net > 0; }).length;
+    var pick = function (arr, better) { return arr.length ? arr.reduce(function (a, b) { return better(b, a) ? b : a; }) : null; };
+    var risk = {
+      maxDD: maxDD, maxDDAt: maxDDAt, maxDDPct: maxDDPct, twr: idx - 1,
       sharpe: rStd ? (rMean / rStd) * Math.sqrt(365) : null,
-      sortino: downside ? (rMean / downside) * Math.sqrt(365) : null,
+      sortino: down ? (rMean / down) * Math.sqrt(365) : null,
       recovery: maxDD < 0 ? totals.net / Math.abs(maxDD) : null,
-      bestDay: activeDays.length ? activeDays.reduce((a, b) => (b.net > a.net ? b : a)) : null,
-      worstDay: activeDays.length ? activeDays.reduce((a, b) => (b.net < a.net ? b : a)) : null,
-      tradingDays: tradingDays.length, greenDays: green,
-      greenDayRate: tradingDays.length ? green / tradingDays.length : null,
-      calendarDays: days.length
+      bestDay: pick(active, function (b, a) { return b.net > a.net; }), worstDay: pick(active, function (b, a) { return b.net < a.net; }),
+      tradingDays: tDays.length, greenDays: green, greenDayRate: tDays.length ? green / tDays.length : null, calendarDays: days.length
     };
 
     // Aggregates.
-    const groupBy = (keyFn) => {
-      const m = new Map();
-      for (const d of days) {
-        const k = keyFn(d.ts);
-        if (!m.has(k)) m.set(k, { key: k, net: 0, realized: 0, fees: 0, funding: 0, trades: 0, wins: 0, losses: 0 });
-        const g = m.get(k);
-        g.net += d.net; g.realized += d.realized + d.spot + d.event; g.fees += d.fees; g.funding += d.funding;
-        g.trades += d.trades; g.wins += d.wins; g.losses += d.losses;
-      }
-      return [...m.values()];
-    };
-    const months = groupBy(monthKey);
-    for (const m of months) {
-      const tm = tradeStats(trades.filter(t => monthKey(t.ts) === m.key));
-      m.winRate = tm.winRate; m.profitFactor = tm.profitFactor; m.expectancy = tm.expectancy;
+    function group(keyFn) {
+      var m = {}, order = [];
+      days.forEach(function (dd) {
+        var k = keyFn(dd.ts);
+        if (!m[k]) { m[k] = { key: k, net: 0, realized: 0, fees: 0, funding: 0, trades: 0, wins: 0, losses: 0 }; order.push(k); }
+        var g = m[k];
+        g.net += dd.net; g.realized += dd.realized + dd.spot + dd.event; g.fees += dd.fees; g.funding += dd.funding;
+        g.trades += dd.trades; g.wins += dd.wins; g.losses += dd.losses;
+      });
+      return order.map(function (k) { return m[k]; });
     }
-    const weeks = groupBy(weekKey);
-    const byWeekday = WEEKDAYS.map((name, i) => ({ key: name, i, net: 0, trades: 0, wins: 0, losses: 0 }));
-    const byHour = Array.from({ length: 24 }, (_, h) => ({ key: h, net: 0, trades: 0, wins: 0, losses: 0 }));
-    for (const t of trades) {
-      const d = new Date(t.ts);
-      for (const g of [byWeekday[(d.getUTCDay() + 6) % 7], byHour[d.getUTCHours()]]) {
-        g.net += t.net; g.trades++; if (t.net > 0) g.wins++; else if (t.net < 0) g.losses++;
-      }
-    }
+    var months = group(monthKey);
+    months.forEach(function (m) {
+      var s = tradeStats(trades.filter(function (t) { return monthKey(t.ts) === m.key; }));
+      m.winRate = s.winRate; m.profitFactor = s.profitFactor; m.expectancy = s.expectancy;
+    });
+    var weeks = group(weekKey);
+    var byWeekday = WEEKDAYS.map(function (n) { return { key: n, net: 0, trades: 0, wins: 0, losses: 0 }; });
+    var byHour = []; for (var hh = 0; hh < 24; hh++) byHour.push({ key: hh, net: 0, trades: 0, wins: 0, losses: 0 });
+    trades.forEach(function (t) {
+      var dt = new Date(t.ts);
+      [byWeekday[(dt.getUTCDay() + 6) % 7], byHour[dt.getUTCHours()]].forEach(function (g) {
+        g.net += t.net; g.trades++;
+        if (t.net > 0) g.wins++; else if (t.net < 0) g.losses++;
+      });
+    });
 
-    // Distribution of trade results.
-    let histogram = [];
+    // Histogram of trade results.
+    var histogram = [];
     if (trades.length) {
-      const nets = trades.map(t => t.net);
-      const lo = Math.min(...nets, 0), hi = Math.max(...nets, 0);
-      const span = hi - lo || 1;
-      const raw = span / Math.min(20, Math.max(6, Math.ceil(Math.sqrt(trades.length) * 2)));
-      const mag = 10 ** Math.floor(Math.log10(raw));
-      const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => s >= raw);
-      const start = Math.floor(lo / step) * step;
-      const n = Math.max(1, Math.ceil((hi - start) / step + 1e-9));
-      histogram = Array.from({ length: n }, (_, i) => ({ lo: start + i * step, hi: start + (i + 1) * step, count: 0, sum: 0 }));
-      for (const x of nets) {
-        const b = histogram[Math.min(n - 1, Math.floor((x - start) / step))];
+      var nets = trades.map(function (t) { return t.net; });
+      var lo = Math.min(0, Math.min.apply(null, nets)), hi = Math.max(0, Math.max.apply(null, nets)), span = hi - lo || 1;
+      var raw = span / Math.max(6, Math.min(20, Math.ceil(Math.sqrt(trades.length) * 2)));
+      var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+      var step = [1, 2, 2.5, 5, 10].map(function (s) { return s * mag; }).filter(function (s) { return s >= raw - 1e-12; })[0];
+      var start = Math.floor(lo / step) * step, n = Math.floor((hi - start) / step + 1e-9) + 1;
+      for (var bi = 0; bi < n; bi++) histogram.push({ lo: start + bi * step, hi: start + (bi + 1) * step, count: 0, sum: 0 });
+      nets.forEach(function (x) {
+        var b = histogram[Math.min(n - 1, Math.max(0, Math.floor((x - start) / step)))];
         b.count++; b.sum += x;
-      }
+      });
     }
 
-    // Funding detail and inferred positions held at each funding settlement.
-    const fundingEv = perfEv.filter(e => e.cat === 'funding');
-    const fundingByHour = Array.from({ length: 24 }, (_, h) => ({ key: h, received: 0, paid: 0, count: 0 }));
-    const settlements = new Map();
-    for (const e of fundingEv) {
-      const g = fundingByHour[new Date(e.ts).getUTCHours()];
+    // Funding by hour and positions held at each settlement.
+    var fundingByHour = []; for (var fh = 0; fh < 24; fh++) fundingByHour.push({ key: fh, received: 0, paid: 0, count: 0 });
+    var settle = {};
+    fundEv.forEach(function (e) {
+      var g = fundingByHour[new Date(e.ts).getUTCHours()];
       if (e.value > 0) g.received += e.value; else g.paid += e.value;
-      g.count++;
-      settlements.set(e.ts, (settlements.get(e.ts) || 0) + 1);
-    }
-    const positions = [...settlements.entries()].map(([ts, count]) => ({ ts, count }));
+      g.count++; settle[e.ts] = (settle[e.ts] || 0) + 1;
+    });
+    var positions = Object.keys(settle).map(Number).sort(function (a, b) { return a - b; }).map(function (ts) { return { ts: ts, count: settle[ts] }; });
 
-    // Cost curves.
-    const costCurve = [];
-    let cf = 0, cfu = 0;
-    for (const e of perfEv) {
-      if (e.cat !== 'fee' && e.cat !== 'funding') continue;
-      if (e.cat === 'fee') cf += e.value; else cfu += e.value;
-      costCurve.push({ ts: e.ts, fees: cf, funding: cfu, total: cf + cfu });
-    }
-    const absGross = sum(trades.map(t => Math.abs(t.gross)));
-    const costs = {
+    // Costs.
+    var costCurve = [], cf = 0, cu = 0;
+    perf.forEach(function (e) {
+      if (e.cat !== 'fee' && e.cat !== 'funding') return;
+      if (e.cat === 'fee') cf += e.value; else cu += e.value;
+      costCurve.push({ ts: e.ts, fees: cf, funding: cu, total: cf + cu });
+    });
+    var absGross = sum(trades.map(function (t) { return Math.abs(t.gross); }));
+    var costs = {
       feePctOfGross: absGross ? Math.abs(totals.fees) / absGross : null,
       feesPerTrade: trades.length ? totals.fees / trades.length : null,
-      openingFees: totals.fees - stats.closeFees,
-      closeFees: stats.closeFees,
+      closeFees: stats.closeFees, openingFees: totals.fees - stats.closeFees,
       dragOnGross: totals.gross ? (totals.fees + totals.funding) / Math.abs(totals.gross) : null
     };
 
-    // Trader score (0-100), in the spirit of TradeZella's Zella Score.
-    const absDaily = activeDays.map(d => Math.abs(d.net));
-    const bigDayShare = absDaily.length ? Math.max(...absDaily) / (sum(absDaily) || 1) : null;
-    const pf = stats.profitFactor === Infinity ? 3 : stats.profitFactor;
-    const scoreParts = [
+    // Trader score.
+    var absDaily = active.map(function (x) { return Math.abs(x.net); });
+    var bigShare = absDaily.length >= 2 ? Math.max.apply(null, absDaily) / (sum(absDaily) || 1) : null;
+    var pf = stats.profitFactor === Infinity ? 3 : stats.profitFactor;
+    var scoreParts = [
       { key: 'Win %', weight: 15, value: stats.winRate == null ? null : clamp01(stats.winRate / 0.6) },
       { key: 'Profit factor', weight: 25, value: pf == null ? null : clamp01(pf / 2.5) },
       { key: 'Avg win / loss', weight: 20, value: stats.payoff == null ? null : clamp01(stats.payoff / 2.5) },
       { key: 'Recovery', weight: 10, value: risk.recovery == null ? (totals.net > 0 ? 1 : null) : clamp01(risk.recovery / 3) },
-      { key: 'Max drawdown', weight: 20, value: returns.length ? clamp01(1 - Math.abs(maxDDPct) / 0.5) : null },
-      { key: 'Consistency', weight: 10, value: bigDayShare == null || absDaily.length < 2 ? null : clamp01((1 - bigDayShare) / 0.8) }
+      { key: 'Max drawdown', weight: 20, value: rets.length ? clamp01(1 - Math.abs(maxDDPct) / 0.5) : null },
+      { key: 'Consistency', weight: 10, value: bigShare == null ? null : clamp01((1 - bigShare) / 0.8) }
     ];
-    const known = scoreParts.filter(p => p.value != null);
-    const score = known.length ? (sum(known.map(p => p.value * p.weight)) / sum(known.map(p => p.weight))) * 100 : null;
+    var known = scoreParts.filter(function (p) { return p.value != null; });
+    var score = known.length ? sum(known.map(function (p) { return p.value * p.weight; })) / sum(known.map(function (p) { return p.weight; })) * 100 : null;
 
-    const range = { from, to: Math.max(from, lastDay), firstTs, lastTs };
-    return { opts, range, totals, stats, risk, curve, days, months, weeks, byWeekday, byHour, histogram,
-      trades, fundingByHour, positions, costCurve, costs, score, scoreParts,
-      flows: flows.map(e => ({ ts: e.ts, label: e.label, asset: e.asset, qty: e.qty, value: e.value, account: e.account })),
-      events: ev };
+    return { opts: opts, range: { from: from, to: Math.max(from, lastDay), firstTs: firstTs, lastTs: lastTs }, totals: totals, stats: stats,
+      risk: risk, curve: curve, days: days, months: months, weeks: weeks, byWeekday: byWeekday, byHour: byHour, histogram: histogram,
+      trades: trades, fundingByHour: fundingByHour, positions: positions, costCurve: costCurve, costs: costs, score: score,
+      scoreParts: scoreParts, flows: flows, events: ev };
   }
 
-  // Rebuilt book balance vs. the balances printed in the report header.
   function reconcile(model) {
-    const end = sum(model.events.map(e => e.value));
-    const closing = model.meta.closing && model.meta.closing.value;
-    return { rebuilt: end, reported: closing == null ? null : closing,
-      diff: closing == null ? null : end - closing, at: model.meta.closing && model.meta.closing.at,
-      opening: model.meta.opening && model.meta.opening.value };
+    var rebuilt = sum(model.events.map(function (e) { return e.value; }));
+    var c = model.meta.closing, reported = c && c.value != null ? c.value : null;
+    return { rebuilt: rebuilt, reported: reported, diff: reported == null ? null : rebuilt - reported, at: c ? c.at : null,
+      opening: model.meta.opening ? model.meta.opening.value : null };
   }
 
   function maskUid(uid) {
     if (!uid) return null;
-    const s = String(uid);
-    return s.length <= 4 ? s : s.slice(0, 2) + '•'.repeat(Math.max(2, s.length - 5)) + s.slice(-3);
+    var s = String(uid);
+    return s.length <= 5 ? s : s.slice(0, 2) + new Array(s.length - 4).join('•') + s.slice(-3);
   }
 
-  // Deterministic demo export in the Bitunix format, so "Load demo data" exercises the real parser.
-  function demoCSV(seed, endTs) {
-    let s = seed || 7;
-    const rnd = () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
-    const end = endTs || Date.UTC(2026, 9, 17);
-    const start = end - 120 * DAY_MS;
-    const fmt = ts => { const d = new Date(ts); return d.getUTCFullYear() + '/' + (d.getUTCMonth() + 1) + '/' + d.getUTCDate() + ' ' +
-      String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'); };
-    const lines = [];
-    let ref = 9100000000000000000;
-    const R = () => String(ref += Math.floor(rnd() * 900000 + 1000));
-    const out = (ts, label, asset, amt, type) => lines.push([ts, fmt(ts) + ',' + label + ',Main,' + asset + ',' + amt + ',—,—,—,—,' + type + ',—,—,—,—,' + R() + ',-']);
-    const inc = (ts, label, asset, amt, type) => lines.push([ts, fmt(ts) + ',' + label + ',Main,—,—,' + asset + ',' + amt + ',—,—,' + type + ',—,—,—,—,' + R() + ',-']);
-    inc(start + 9 * 3600000, 'Deposit', 'USDT', 1500, 'T0015');
-    inc(start + 50 * DAY_MS + 11 * 3600000, 'Deposit', 'USDT', 750, 'T0015');
-    out(start + 100 * DAY_MS + 15 * 3600000, 'Withdrawal', 'USDT', 400, 'T0016');
-    let open = 0;
-    for (let d = 1; d < 120; d++) {
-      const day = start + d * DAY_MS;
-      for (const h of [0, 8, 16]) {
-        for (let p = 0; p < open; p++) {
-          const v = +(rnd() * 0.35).toFixed(6);
-          if (rnd() < 0.62) out(day + h * 3600000, 'Funding Cost', 'USDT', v, 'T0045');
-          else inc(day + h * 3600000, 'Funding Cost', 'USDT', v, 'T0046');
+  // Deterministic demo export in the real Bitunix format.
+  function demoCSV(seed) {
+    var s = seed || 7;
+    function rnd() { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }
+    var end = Date.UTC(2026, 9, 17), start = end - 120 * DAY;
+    function fmt(ts) {
+      var d = new Date(ts);
+      return d.getUTCFullYear() + '/' + (d.getUTCMonth() + 1) + '/' + d.getUTCDate() + ' ' +
+        String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
+    }
+    var lines = [], ref = 2000000000000000000;
+    function R() { ref += Math.floor(rnd() * 900000 + 1000); return String(ref); }
+    function out(ts, label, amt, type) { lines.push([ts, fmt(ts) + ',' + label + ',Main,USDT,' + amt + ',—,—,—,—,' + type + ',—,—,—,—,' + R() + ',-']); }
+    function inc(ts, label, amt, type) { lines.push([ts, fmt(ts) + ',' + label + ',Main,—,—,USDT,' + amt + ',—,—,' + type + ',—,—,—,—,' + R() + ',-']); }
+    inc(start + 9 * 3600000, 'Deposit', 1500, 'T0015');
+    inc(start + 50 * DAY + 11 * 3600000, 'Deposit', 750, 'T0015');
+    out(start + 100 * DAY + 15 * 3600000, 'Withdrawal', 400, 'T0016');
+    var open = 0;
+    for (var d = 1; d < 120; d++) {
+      var day = start + d * DAY;
+      [0, 8, 16].forEach(function (h) {
+        for (var p = 0; p < open; p++) {
+          var v = +(rnd() * 0.35).toFixed(6);
+          if (rnd() < 0.62) out(day + h * 3600000, 'Funding Cost', v, 'T0045'); else inc(day + h * 3600000, 'Funding Cost', v, 'T0046');
         }
-      }
+      });
       if (rnd() < 0.42) continue;
-      const n = 1 + Math.floor(rnd() * 3);
-      for (let k = 0; k < n; k++) {
-        const t0 = day + Math.floor(rnd() * 22 + 1) * 3600000 + Math.floor(rnd() * 59) * 60000;
-        const size = 300 + rnd() * 1700;
-        out(t0, 'Futures Fee', 'USDT', +(size * 0.0006).toFixed(6), 'T0103');
-        const hold = Math.floor(rnd() * 20 + 1) * 1800000;
-        const edge = d > 70 ? 0.008 : 0.002;
-        const r = (rnd() - 0.47) * 0.06 + edge;
-        const pnl = +(size * r).toFixed(4);
-        out(t0 + hold, 'Futures Fee', 'USDT', +(size * 0.0006).toFixed(6), 'T0103');
-        if (pnl >= 0) inc(t0 + hold, 'PnL', 'USDT', pnl, 'T0041'); else out(t0 + hold, 'PnL', 'USDT', -pnl, 'T0042');
+      var n = 1 + Math.floor(rnd() * 3);
+      for (var k = 0; k < n; k++) {
+        var t0 = day + Math.floor(rnd() * 22 + 1) * 3600000 + Math.floor(rnd() * 59) * 60000;
+        var size = 300 + rnd() * 1700, hold = Math.floor(rnd() * 20 + 1) * 1800000;
+        var r = (rnd() - 0.47) * 0.06 + (d > 70 ? 0.008 : 0.002), pnl = +(size * r).toFixed(4);
+        out(t0, 'Futures Fee', +(size * 0.0006).toFixed(6), 'T0103');
+        out(t0 + hold, 'Futures Fee', +(size * 0.0006).toFixed(6), 'T0103');
+        if (pnl >= 0) inc(t0 + hold, 'PnL', pnl, 'T0041'); else out(t0 + hold, 'PnL', -pnl, 'T0042');
         if (hold > 8 * 3600000) open = Math.min(3, open + 1); else if (open > 0 && rnd() < 0.5) open--;
       }
-      if (rnd() < 0.06) inc(day + 12 * 3600000, 'Referral Commission', 'USDT', +(rnd() * 4).toFixed(4), 'T0026');
+      if (rnd() < 0.06) inc(day + 12 * 3600000, 'Referral Commission', +(rnd() * 4).toFixed(4), 'T0026');
     }
-    lines.sort((a, b) => a[0] - b[0]);
-    const header = ['Platform: Bitunix (demo data)', 'Export Date: ' + new Date(end).toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+    lines.sort(function (a, b) { return a[0] - b[0]; });
+    var head = ['Platform: Bitunix (demo data)', 'Export Date: ' + new Date(end).toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
       'User UID: 100000042', 'Period: ' + dayKey(start) + ' ~ ' + dayKey(end),
-      '"Opening Balance (' + dayKey(start) + ' 00:00:00 UTC, total account value in USDT): 0 USDT"',
+      '"Opening Balance (' + dayKey(start) + ' 00:00:00 UTC, total account value in USDT): "',
       '----------------------------------------',
       'Date (UTC),Label,Account,Outgoing Asset,Outgoing Amount,Incoming Asset,Incoming Amount,Fee Asset,Fee Amount,Type ID,TXID,From Address,To Address,Network,Reference ID,Comment'];
-    return header.concat(lines.map(l => l[1])).join('\n') + '\n';
+    return head.concat(lines.map(function (l) { return l[1]; })).join('\n') + '\n';
   }
 
-  root.PnLCore = { parseCSV, parseReport, mergeReports, buildModel, loadReports, analyze, tradeStats,
-    reconcile, classify, maskUid, demoCSV, dayKey, monthKey, weekKey, CATEGORY_LABELS, PERF_CATS, WEEKDAYS };
+  root.PnLCore = { parseCSV: parseCSV, parseReport: parseReport, mergeReports: mergeReports, buildModel: buildModel,
+    loadReports: loadReports, analyze: analyze, tradeStats: tradeStats, reconcile: reconcile, classify: classify,
+    maskUid: maskUid, demoCSV: demoCSV, CATEGORY_LABELS: CATEGORY_LABELS, dayKey: dayKey, monthKey: monthKey, weekKey: weekKey };
 })(typeof window !== 'undefined' ? window : globalThis);
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
-<script id="pnl-ui">
-(function () {
-  'use strict';
-  const C = window.PnLCore;
-  const DAY = 86400000;
-  const $ = id => document.getElementById(id);
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const store = {
-    get(k) { try { return localStorage.getItem('pnl-lens:' + k); } catch (e) { return null; } },
-    set(k, v) { try { localStorage.setItem('pnl-lens:' + k, v); } catch (e) { /* storage unavailable */ } }
-  };
-
-  const S = {
-    files: [], model: null, isDemo: true, A: null,
-    preset: store.get('preset') || 'all', from: null, to: null,
-    market: 'all', account: 'all', incFees: true, incFunding: true, incIncome: true,
-    period: 'day', eqMode: 'pnl', calMonth: null, selDay: null,
-    tab: 'trades', sort: { key: 'ts', dir: -1 }, q: '', result: 'all', ledgerCat: 'all', limit: 200
-  };
-
-  // ---------- formatting ----------
-  function money(v, o) {
-    o = o || {};
-    if (v === Infinity) return '∞';
-    if (v == null || !Number.isFinite(v)) return '—';
-    const dp = o.dp != null ? o.dp : (o.small && Math.abs(v) < 1 && v !== 0 ? 4 : 2);
-    const s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
-    const sign = v < 0 && Math.abs(v) >= 0.5 * 10 ** -dp ? '−' : (o.sign && v > 0 ? '+' : '');
-    return sign + s;
-  }
-  function compact(v) {
-    const a = Math.abs(v);
-    if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'M';
-    if (a >= 1e3) return (v / 1e3).toFixed(a >= 1e4 ? 0 : 1) + 'K';
-    return String(Math.round(v * 100) / 100).replace('-', '−');
-  }
-  const pct = (v, dp) => (v == null || !Number.isFinite(v) ? '—' : (v < 0 ? '−' : '') + Math.abs(v * 100).toFixed(dp == null ? 1 : dp) + '%');
-  const ratio = v => (v === Infinity ? '∞' : v == null || !Number.isFinite(v) ? '—' : v.toFixed(2).replace('-', '−'));
-  const cls = v => (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
-  const arrow = v => (v > 0 ? '▲ ' : v < 0 ? '▼ ' : '');
-  const fmtDT = ts => new Date(ts).toISOString().slice(0, 16).replace('T', ' ');
-  const fmtDay = ts => new Date(ts).toISOString().slice(0, 10);
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const niceDay = ts => { const d = new Date(ts); return MONTHS[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear(); };
-  const CAT_NAMES = { realized: 'Realized PnL', spot: 'Spot PnL', event: 'Event contracts', fee: 'Fee', funding: 'Funding',
-    income: 'Rewards', cashflow: 'Deposit / withdrawal', internal: 'Internal transfer', earn: 'Earn', bonus: 'Bonus funds',
-    conversion: 'Conversion', other: 'Other' };
-
-  function tokens() {
-    const cs = getComputedStyle(document.documentElement);
-    const g = n => cs.getPropertyValue('--' + n).trim();
-    return { bg: g('bg'), surface: g('surface'), surface2: g('surface-2'), line: g('line'), grid: g('grid'), base: g('base'),
-      ink: g('ink'), ink2: g('ink-2'), muted: g('muted'), accent: g('accent'), gain: g('gain'), loss: g('loss'),
-      amber: g('amber'), violet: g('violet'), mid: g('mid'), font: g('font-body') || 'system-ui' };
-  }
-  function catColor(cat, T) {
-    return { realized: T.accent, spot: T.accent, event: T.accent, fee: T.amber, funding: T.violet, income: T.gain,
-      cashflow: T.ink2, internal: T.muted, earn: T.muted, bonus: T.muted, conversion: T.muted, other: T.muted }[cat] || T.muted;
-  }
-
-  // ---------- data loading ----------
-  function load(files, isDemo) {
-    try {
-      const model = C.loadReports(files);
-      if (!model.events.length) throw new Error('The file has a header but no transaction rows.');
-      S.files = files; S.model = model; S.isDemo = isDemo; S.selDay = null; S.calMonth = null;
-      S.account = 'all';
-      hideBanner();
-      if (isDemo) showDemoBanner();
-      applyPreset(S.preset, true);
-      render();
-      if (!isDemo) toast('Loaded ' + model.rows.length.toLocaleString() + ' rows from ' + files.length + ' file' + (files.length > 1 ? 's' : ''));
-    } catch (err) {
-      showError(err.message || String(err));
-    }
-  }
-  async function readFiles(list, append) {
-    const arr = [...list].filter(f => /\.csv$/i.test(f.name) || /csv|text/.test(f.type));
-    if (!arr.length) { showError('That file is not a CSV. Export the tax report from Bitunix as CSV and upload it as-is.'); return; }
-    const files = await Promise.all(arr.map(async f => ({ name: f.name, text: await f.text() })));
-    load(append && !S.isDemo ? S.files.concat(files) : files, false);
-  }
-  function loadDemo() { load([{ name: 'demo-export.csv', text: C.demoCSV() }], true); }
-
-  function showDemoBanner() {
-    const b = $('banner');
-    b.className = 'banner';
-    b.innerHTML = '<p><strong>You’re looking at demo data.</strong> Upload a Bitunix tax report CSV ' +
-      '(Assets → Tax report → Export) to see your own numbers. It’s read in this tab and never leaves your device.</p>' +
-      '<button class="btn primary" type="button" data-act="upload">Upload CSV</button>';
-    b.hidden = false;
-  }
-  function showError(msg) {
-    const b = $('banner');
-    b.className = 'banner error';
-    b.innerHTML = '<p><strong>Couldn’t read that file.</strong> ' + esc(msg) + '</p>' +
-      '<button class="btn" type="button" data-act="upload">Try another file</button>' +
-      (S.model ? '' : '<button class="btn" type="button" data-act="demo">Load demo data</button>');
-    b.hidden = false;
-  }
-  function hideBanner() { $('banner').hidden = true; }
-  let toastTimer;
-  function toast(msg) {
-    const t = $('toast');
-    t.textContent = msg; t.hidden = false;
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
-  }
-
-  // ---------- filters ----------
-  function dataBounds() {
-    const ev = S.model.events;
-    return { first: Math.floor(ev[0].ts / DAY) * DAY, last: Math.floor(ev[ev.length - 1].ts / DAY) * DAY };
-  }
-  function applyPreset(p, silent) {
-    S.preset = p; store.set('preset', p);
-    const b = dataBounds();
-    if (p === 'all') { S.from = b.first; S.to = b.last; }
-    else if (p === 'ytd') { S.from = Math.max(b.first, Date.UTC(new Date(b.last).getUTCFullYear(), 0, 1)); S.to = b.last; }
-    else if (p === 'custom') { /* keep */ }
-    else { S.from = Math.max(b.first, b.last - (Number(p) - 1) * DAY); S.to = b.last; }
-    S.selDay = null; S.calMonth = null;
-    if (!silent) render();
-  }
-  function opts() {
-    return { from: S.from, to: S.to, account: S.account, market: S.market,
-      includeFees: S.incFees, includeFunding: S.incFunding, includeIncome: S.incIncome };
-  }
-
-  // ---------- render ----------
-  function render() {
-    if (!S.model) return;
-    const A = S.A = C.analyze(S.model, opts());
-    renderControls();
-    renderSource();
-    if (!A) { $('heroValue').textContent = '—'; return; }
-    const T = tokens();
-    renderHero(A, T);
-    renderKpis(A, T);
-    renderCalendar(A, T);
-    renderScore(A, T);
-    renderTradeStats(A);
-    renderCostStats(A);
-    renderTables(A, T);
-    renderNotes(A);
-    renderCharts(A, T);
-  }
-
-  function renderControls() {
-    for (const b of $('presets').children) b.setAttribute('aria-pressed', String(b.dataset.p === S.preset));
-    for (const b of $('market').children) b.setAttribute('aria-pressed', String(b.dataset.m === S.market));
-    for (const b of $('period').children) b.setAttribute('aria-pressed', String(b.dataset.v === S.period));
-    for (const b of $('eqMode').children) b.setAttribute('aria-pressed', String(b.dataset.v === S.eqMode));
-    $('incFees').setAttribute('aria-pressed', String(S.incFees));
-    $('incFunding').setAttribute('aria-pressed', String(S.incFunding));
-    $('incIncome').setAttribute('aria-pressed', String(S.incIncome));
-    const b = dataBounds();
-    for (const id of ['fromDate', 'toDate']) { $(id).min = fmtDay(b.first); $(id).max = fmtDay(b.last); }
-    $('fromDate').value = fmtDay(S.from); $('toDate').value = fmtDay(S.to);
-    const accts = S.model.accounts;
-    $('accountGroup').hidden = accts.length < 2;
-    if (accts.length > 1) {
-      $('account').innerHTML = '<option value="all">All accounts</option>' + accts.map(a => '<option value="' + esc(a) + '">' + esc(a) + '</option>').join('');
-      $('account').value = S.account;
-    }
-  }
-
-  function renderSource() {
-    const m = S.model.meta;
-    const parts = [];
-    if (S.isDemo) parts.push('<span class="chip demo">Demo data</span>');
-    else parts.push('<span class="chip" title="' + esc(m.fileNames.join(', ')) + '">' + esc(m.fileNames.length > 1 ? m.fileNames.length + ' files merged' : m.fileNames[0] || 'CSV') + '</span>');
-    if (m.platform) parts.push('<span class="hide-sm">' + esc(m.platform) + '</span>');
-    if (m.uid) parts.push('<span class="hide-sm">UID ' + esc(C.maskUid(m.uid)) + '</span>');
-    const b = dataBounds();
-    parts.push('<span class="hide-sm">' + niceDay(b.first) + ' – ' + niceDay(b.last) + '</span>');
-    $('source').innerHTML = parts.join('<span class="muted hide-sm">·</span>');
-  }
-
-  function renderHero(A, T) {
-    const t = A.totals;
-    $('heroValue').innerHTML = '<span class="' + cls(t.net) + '">' + arrow(t.net) + money(t.net, { sign: true }) + '</span><small>USDT</small>';
-    $('heroLabel').textContent = 'Net PnL · ' + niceDay(A.range.from) + ' – ' + niceDay(A.range.to);
-    $('heroRoi').innerHTML =
-      '<span class="pill ' + (t.roi > 0 ? 'good' : t.roi < 0 ? 'bad' : '') + '">' + arrow(t.roi) + pct(t.roi) + ' ROI</span>' +
-      '<span>on ' + money(t.equityStart + t.deposits) + ' USDT of starting balance plus deposits</span>';
-    const row = (label, v, color, extra) => '<div><span><i class="key" style="background:' + color + '"></i>' + label +
-      (extra ? ' <span class="muted">' + extra + '</span>' : '') + '</span><span class="num ' + cls(v) + '">' + money(v, { sign: true }) + '</span></div>';
-    const off = '<span class="muted">(not in net)</span>';
-    let html = row('Realized PnL', t.realized, T.accent);
-    if (Math.abs(t.spot) > 0.005) html += row('Spot PnL', t.spot, T.accent);
-    if (Math.abs(t.event) > 0.005) html += row('Event contracts', t.event, T.accent);
-    html += row('Trading fees', t.fees, T.amber, S.incFees ? '' : off);
-    html += row('Funding', t.funding, T.violet, (money(t.fundingReceived) + ' in · ' + money(-t.fundingPaid) + ' out') + (S.incFunding ? '' : ' · not in net'));
-    if (Math.abs(t.income) > 0.005 || !S.incIncome) html += row('Rewards', t.income, T.gain, S.incIncome ? '' : off);
-    html += '<div class="total"><span>Net PnL</span><span class="num ' + cls(t.net) + '">' + money(t.net, { sign: true }) + '</span></div>';
-    $('heroBreakdown').innerHTML = html;
-    $('eqSub').textContent = S.eqMode === 'pnl' ? 'Net vs. gross, with drawdown below' : 'Book value incl. deposits and withdrawals';
-  }
-
-  function renderKpis(A, T) {
-    const s = A.stats, r = A.risk, t = A.totals;
-    const good = (cond, txt) => '<span class="pill ' + (cond ? 'good' : 'bad') + '">' + (cond ? '✓ ' : '! ') + txt + '</span>';
-    const winW = s.wins + s.losses ? (s.wins / (s.wins + s.losses)) * 100 : 0;
-    const tiles = [
-      { l: 'Win rate', v: pct(s.winRate), s: s.wins + ' won · ' + s.losses + ' lost' + (s.breakeven ? ' · ' + s.breakeven + ' flat' : ''),
-        extra: s.wins + s.losses ? '<div class="wl" aria-hidden="true"><i style="width:' + winW + '%;background:' + T.gain + '"></i><i style="flex:1;background:' + T.loss + '"></i></div>' : '' },
-      { l: 'Profit factor', v: ratio(s.profitFactor), s: s.profitFactor == null ? 'No closed trades' : good(s.profitFactor >= 1, s.profitFactor >= 1 ? 'Above 1' : 'Below 1') },
-      { l: 'Expectancy', v: '<span class="' + cls(s.expectancy) + '">' + money(s.expectancy, { sign: true }) + '</span>', s: 'USDT per trade, net of closing fee' },
-      { l: 'Avg win / avg loss', v: '<span class="pos">' + money(s.avgWin) + '</span> <span class="muted">/</span> <span class="neg">' + money(s.avgLoss == null ? null : Math.abs(s.avgLoss)) + '</span>',
-        s: 'Payoff ratio ' + ratio(s.payoff) },
-      { l: 'Max drawdown', v: '<span class="' + (r.maxDD < 0 ? 'neg' : '') + '">' + money(r.maxDD) + '</span>', s: pct(r.maxDDPct) + ' of balance, peak to trough' },
-      { l: 'Sharpe · Sortino', v: ratio(r.sharpe) + ' <span class="muted">·</span> ' + ratio(r.sortino), s: 'Daily returns, annualized' },
-      { l: 'Trades', v: s.count.toLocaleString(), s: 'Streaks: ' + s.maxWinStreak + ' wins · ' + s.maxLossStreak + ' losses' },
-      { l: 'Best trade · worst', v: '<span class="pos">' + money(s.largestWin, { sign: true }) + '</span>', s: '<span class="neg">' + money(s.largestLoss, { sign: true }) + '</span> worst' },
-      { l: 'Trading fees', v: '<span class="' + cls(t.fees) + '">' + money(t.fees) + '</span>', s: pct(A.costs.feePctOfGross) + ' of gross |PnL| traded' },
-      { l: 'Funding, net', v: '<span class="' + cls(t.funding) + '">' + money(t.funding, { sign: true }) + '</span>', s: money(t.fundingReceived) + ' in · ' + money(-t.fundingPaid) + ' out' },
-      { l: 'Green days', v: pct(r.greenDayRate, 0), s: r.greenDays + ' of ' + r.tradingDays + ' trading days' },
-      { l: 'Best day · worst', v: r.bestDay ? '<span class="' + cls(r.bestDay.net) + '">' + money(r.bestDay.net, { sign: true }) + '</span>' : '—',
-        s: r.worstDay ? '<span class="' + cls(r.worstDay.net) + '">' + money(r.worstDay.net, { sign: true }) + '</span> on ' + r.worstDay.day : '' }
-    ];
-    $('kpis').innerHTML = tiles.map(x => '<div class="tile" role="listitem"><div class="t-l">' + x.l + '</div><div class="t-v num">' + x.v +
-      '</div><div class="t-s">' + x.s + '</div>' + (x.extra || '') + '</div>').join('');
-  }
-
-  // TradeZella-style month calendar with weekly totals.
-  function renderCalendar(A, T) {
-    const days = new Map(A.days.map(d => [d.day, d]));
-    const months = [...new Set(A.days.map(d => d.day.slice(0, 7)))];
-    if (!months.length) { $('cal').innerHTML = ''; return; }
-    if (!S.calMonth || !months.includes(S.calMonth)) {
-      const active = A.days.filter(d => d.trades || d.net).map(d => d.day.slice(0, 7));
-      S.calMonth = active.length ? active[active.length - 1] : months[months.length - 1];
-    }
-    const mi = months.indexOf(S.calMonth);
-    $('calPrev').disabled = mi <= 0; $('calNext').disabled = mi >= months.length - 1;
-    const [y, m] = S.calMonth.split('-').map(Number);
-    $('calMonth').textContent = MONTHS[m - 1] + ' ' + y;
-    const first = Date.UTC(y, m - 1, 1);
-    const lead = (new Date(first).getUTCDay() + 6) % 7;
-    const nDays = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    const monthDays = A.days.filter(d => d.day.startsWith(S.calMonth));
-    const maxAbs = Math.max(1e-9, ...monthDays.map(d => Math.abs(d.net)));
-    const mTotal = monthDays.reduce((s, d) => s + d.net, 0);
-    const mTrades = monthDays.reduce((s, d) => s + d.trades, 0);
-    $('calSub').innerHTML = '<span class="' + cls(mTotal) + '">' + money(mTotal, { sign: true }) + '</span> · ' + mTrades + ' trades';
-    const tint = v => {
-      if (!v) return '';
-      const k = Math.round(10 + 34 * Math.sqrt(Math.abs(v) / maxAbs));
-      return 'background:color-mix(in srgb, ' + (v > 0 ? 'var(--gain)' : 'var(--loss)') + ' ' + k + '%, var(--surface-2));';
-    };
-    let html = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Week'].map(d => '<div class="dow">' + d + '</div>').join('');
-    let wk = { net: 0, trades: 0, any: false }, col = 0, wkNo = 1;
-    const flushWeek = () => {
-      html += '<div class="cell wk"><span class="d">Week ' + wkNo++ + '</span>' + (wk.any ? '<span class="v ' + cls(wk.net) + '">' + money(wk.net, { sign: true }) + '</span><span class="n">' + wk.trades + ' trades</span>' : '<span class="v muted">—</span>') + '</div>';
-      wk = { net: 0, trades: 0, any: false }; col = 0;
-    };
-    for (let i = 0; i < lead; i++) { html += '<div class="cell out" aria-hidden="true"></div>'; col++; }
-    for (let dnum = 1; dnum <= nDays; dnum++) {
-      const key = S.calMonth + '-' + String(dnum).padStart(2, '0');
-      const d = days.get(key);
-      if (!d) html += '<div class="cell out"><span class="d">' + dnum + '</span></div>';
-      else {
-        const active = d.trades || Math.abs(d.net) > 0.0049;
-        if (active) { wk.net += d.net; wk.trades += d.trades; wk.any = true; }
-        const label = niceDay(d.ts) + ': ' + (active ? money(d.net, { sign: true }) + ' USDT, ' + d.trades + ' trades' : 'no activity');
-        html += '<button type="button" class="cell" data-day="' + key + '" aria-pressed="' + (S.selDay === key) + '" aria-label="' + esc(label) + '" style="' + tint(active ? d.net : 0) + '">' +
-          '<span class="d">' + dnum + '</span>' +
-          (active ? '<span class="v">' + money(d.net, { sign: true }) + '</span><span class="n">' + (d.trades ? d.trades + (d.trades > 1 ? ' trades' : ' trade') + (d.trades ? ' · ' + d.wins + 'W ' + d.losses + 'L' : '') : 'funding/fees') + '</span>' : '') +
-          '</button>';
-      }
-      if (++col === 7) flushWeek();
-    }
-    if (col) { while (col < 7) { html += '<div class="cell out" aria-hidden="true"></div>'; col++; } flushWeek(); }
-    $('cal').innerHTML = html;
-    $('calLegend').innerHTML = '<span>Loss</span><span class="ramp">' + [44, 30, 18].map(k => '<i style="background:color-mix(in srgb, var(--loss) ' + k + '%, var(--surface-2))"></i>').join('') +
-      '<i style="background:var(--surface-2)"></i>' + [18, 30, 44].map(k => '<i style="background:color-mix(in srgb, var(--gain) ' + k + '%, var(--surface-2))"></i>').join('') +
-      '</span><span>Gain</span><span class="spacer"></span><span>Click a day to list its trades</span>';
-  }
-
-  function renderScore(A) {
-    $('scoreNum').innerHTML = A.score == null ? '—' : Math.round(A.score) + '<small> / 100</small>';
-    $('scoreParts').innerHTML = A.scoreParts.map(p => '<div class="part"><span>' + p.key + '</span><span class="bar"><i style="width:' +
-      (p.value == null ? 0 : p.value * 100) + '%"></i></span><span class="pv">' + (p.value == null ? 'n/a' : Math.round(p.value * 100)) + '</span></div>').join('');
-  }
-
-  function renderTradeStats(A) {
-    const s = A.stats;
-    const item = (k, v) => '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>';
-    $('tradeStats').innerHTML = [
-      item('Gross wins', '<span class="pos">' + money(s.grossWin, { sign: true }) + '</span>'),
-      item('Gross losses', '<span class="neg">' + money(s.grossLoss, { sign: true }) + '</span>'),
-      item('Closing fees', money(s.closeFees)),
-      item('Futures · spot', A.trades.filter(t => t.market === 'futures').length + ' · ' + A.trades.filter(t => t.market === 'spot').length)
-    ].join('');
-  }
-  function renderCostStats(A) {
-    const c = A.costs, t = A.totals;
-    const item = (k, v) => '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>';
-    $('costStats').innerHTML = [
-      item('Opening fees', money(c.openingFees)),
-      item('Closing fees', money(c.closeFees)),
-      item('Fees per trade', money(c.feesPerTrade, { small: true })),
-      item('Costs vs. gross', pct(c.dragOnGross == null ? null : Math.abs(c.dragOnGross)) + (t.fees + t.funding > 0 ? ' credit' : ''))
-    ].join('');
-    $('fundSub').textContent = A.positions.length ? A.positions.length + ' settlements · up to ' + Math.max(...A.positions.map(p => p.count)) + ' positions held' : 'No funding in range';
-  }
-
-  // ---------- tables ----------
-  function renderTables(A, T) {
-    const trades = filteredTrades(A);
-    $('cTrades').textContent = A.trades.length;
-    $('cMonthly').textContent = A.months.length;
-    $('cLedger').textContent = A.events.length;
-    $('cFlows').textContent = A.flows.length;
-    $('cAssets').textContent = S.model.otherAssets.length + S.model.unvalued.length;
-    for (const b of $('tabs').children) b.setAttribute('aria-selected', String(b.dataset.t === S.tab));
-    const tools = $('tools'), wrap = $('tableWrap'), more = $('tableMore');
-    more.innerHTML = '';
-    if (S.tab === 'trades') {
-      tools.innerHTML =
-        '<input type="search" id="q" placeholder="Search date, label, reference" value="' + esc(S.q) + '" aria-label="Search trades">' +
-        '<div class="seg" id="resultSeg" role="group" aria-label="Result">' + ['all', 'win', 'loss'].map(v => '<button type="button" data-v="' + v + '" aria-pressed="' + (S.result === v) + '">' + { all: 'All', win: 'Wins', loss: 'Losses' }[v] + '</button>').join('') + '</div>' +
-        (S.selDay ? '<button class="chip" type="button" id="clearDay" aria-label="Clear day filter">' + esc(S.selDay) + ' ✕</button>' : '') +
-        '<span class="spacer"></span><span class="muted">' + trades.length + ' shown</span><button class="btn" type="button" id="copyCsv">Copy as CSV</button>';
-      const cols = [
-        ['#', 'i', 'r'], ['Closed (UTC)', 'ts'], ['Market', 'market'], ['Type', 'label'], ['Gross PnL', 'gross', 'r'], ['Closing fee', 'fee', 'r'], ['Net PnL', 'net', 'r'], ['Result', 'net'], ['Reference', 'ref']
-      ];
-      const head = '<tr>' + cols.map(c => {
-        const sortable = c[1] !== 'i' && c[0] !== 'Result';
-        const sorted = sortable && S.sort.key === c[1] ? (S.sort.dir > 0 ? 'ascending' : 'descending') : null;
-        return '<th class="' + (c[2] || '') + (sortable ? ' sortable' : '') + '"' + (sortable ? ' data-sort="' + c[1] + '" tabindex="0"' : '') + (sorted ? ' aria-sort="' + sorted + '"' : '') + '>' + c[0] + '</th>';
-      }).join('') + '</tr>';
-      const body = trades.map(t => '<tr><td class="r muted">' + t.i + '</td><td class="num">' + fmtDT(t.ts) + '</td><td>' + (t.market === 'spot' ? 'Spot' : 'Futures') +
-        '</td><td>' + esc(t.label) + '</td><td class="r ' + cls(t.gross) + '">' + money(t.gross, { sign: true, small: true }) + '</td><td class="r muted">' + money(t.fee, { small: true }) +
-        '</td><td class="r ' + cls(t.net) + '"><b>' + money(t.net, { sign: true, small: true }) + '</b></td><td><span class="res ' + (t.net > 0 ? 'win">Win' : t.net < 0 ? 'loss">Loss' : 'be">Flat') +
-        '</span></td><td class="mono muted">' + esc(t.ref || '—') + '</td></tr>').join('');
-      wrap.innerHTML = '<table><thead>' + head + '</thead><tbody>' + (body || '<tr><td colspan="9" class="empty">No trades match these filters.</td></tr>') + '</tbody></table>';
-    } else if (S.tab === 'monthly') {
-      tools.innerHTML = '<span class="muted">Totals per calendar month (UTC) for the selected range.</span>';
-      const rows = A.months.slice().reverse().map(m => '<tr><td class="num"><b>' + m.key + '</b></td><td class="r ' + cls(m.net) + '"><b>' + money(m.net, { sign: true }) + '</b></td><td class="r ' + cls(m.realized) + '">' +
-        money(m.realized, { sign: true }) + '</td><td class="r">' + money(m.fees) + '</td><td class="r ' + cls(m.funding) + '">' + money(m.funding, { sign: true }) + '</td><td class="r">' + m.trades +
-        '</td><td class="r">' + pct(m.winRate, 0) + '</td><td class="r">' + ratio(m.profitFactor) + '</td><td class="r ' + cls(m.expectancy) + '">' + money(m.expectancy, { sign: true }) + '</td></tr>').join('');
-      const t = A.totals, s = A.stats;
-      const foot = '<tr><td><b>Total</b></td><td class="r ' + cls(t.net) + '"><b>' + money(t.net, { sign: true }) + '</b></td><td class="r">' + money(t.gross, { sign: true }) + '</td><td class="r">' + money(t.fees) +
-        '</td><td class="r">' + money(t.funding, { sign: true }) + '</td><td class="r">' + s.count + '</td><td class="r">' + pct(s.winRate, 0) + '</td><td class="r">' + ratio(s.profitFactor) + '</td><td class="r">' + money(s.expectancy, { sign: true }) + '</td></tr>';
-      wrap.innerHTML = '<table><thead><tr><th>Month</th><th class="r">Net PnL</th><th class="r">Realized</th><th class="r">Fees</th><th class="r">Funding</th><th class="r">Trades</th><th class="r">Win %</th><th class="r">Profit factor</th><th class="r">Expectancy</th></tr></thead><tbody>' +
-        (rows || '<tr><td colspan="9" class="empty">No months in range.</td></tr>') + foot + '</tbody></table>';
-    } else if (S.tab === 'ledger') {
-      const cats = [...new Set(A.events.map(e => e.cat))];
-      tools.innerHTML = '<input type="search" id="q" placeholder="Search label, asset, reference" value="' + esc(S.q) + '" aria-label="Search ledger">' +
-        '<select id="ledgerCat" aria-label="Category"><option value="all">All categories</option>' + cats.map(c => '<option value="' + c + '"' + (S.ledgerCat === c ? ' selected' : '') + '>' + CAT_NAMES[c] + '</option>').join('') + '</select>' +
-        (S.selDay ? '<button class="chip" type="button" id="clearDay" aria-label="Clear day filter">' + esc(S.selDay) + ' ✕</button>' : '');
-      const q = S.q.trim().toLowerCase();
-      const ev = A.events.filter(e => (S.ledgerCat === 'all' || e.cat === S.ledgerCat) && (!S.selDay || fmtDay(e.ts) === S.selDay) &&
-        (!q || [fmtDT(e.ts), e.label, e.asset, e.row.ref, e.row.txid, e.account].join(' ').toLowerCase().includes(q))).reverse();
-      const shown = ev.slice(0, S.limit);
-      wrap.innerHTML = '<table><thead><tr><th>Date (UTC)</th><th>Label</th><th>Category</th><th>Account</th><th class="r">Amount</th><th>Asset</th><th class="r">Value (USDT)</th><th>Reference</th></tr></thead><tbody>' +
-        (shown.map(e => '<tr><td class="num">' + fmtDT(e.ts) + '</td><td>' + esc(e.label) + (e.detail ? ' <span class="muted">· ' + esc(e.detail) + '</span>' : '') + (e.closing ? ' <span class="muted">· closing</span>' : '') +
-          '</td><td><span class="cat" style="--c:' + catColor(e.cat, T) + '">' + CAT_NAMES[e.cat] + '</span></td><td>' + esc(e.account) + '</td><td class="r">' + (e.qty != null ? money(e.qty, { dp: e.asset === 'USDT' ? 4 : 8 }) : '') +
-          '</td><td>' + esc(e.asset || (e.row.outAsset + (e.row.inAsset ? ' → ' + e.row.inAsset : ''))) + '</td><td class="r ' + cls(e.value) + '">' + money(e.value, { sign: true, small: true }) + '</td><td class="mono muted">' + esc(e.row.ref || e.row.txid || '—') + '</td></tr>').join('') ||
-          '<tr><td colspan="8" class="empty">No rows match.</td></tr>') + '</tbody></table>';
-      if (ev.length > S.limit) more.innerHTML = '<button class="btn more" type="button" id="showMore">Show ' + Math.min(500, ev.length - S.limit) + ' more of ' + (ev.length - S.limit) + '</button>';
-    } else if (S.tab === 'flows') {
-      tools.innerHTML = '<span class="muted">Money in and out of the account. These don’t count toward PnL.</span>';
-      wrap.innerHTML = '<table><thead><tr><th>Date (UTC)</th><th>Type</th><th>Account</th><th class="r">Amount</th><th>Asset</th><th class="r">Value (USDT)</th></tr></thead><tbody>' +
-        (A.flows.slice().reverse().map(f => '<tr><td class="num">' + fmtDT(f.ts) + '</td><td>' + esc(f.label) + '</td><td>' + esc(f.account) + '</td><td class="r">' + money(f.qty, { dp: f.asset === 'USDT' ? 4 : 8 }) +
-          '</td><td>' + esc(f.asset) + '</td><td class="r ' + cls(f.value) + '">' + money(f.value, { sign: true }) + '</td></tr>').join('') || '<tr><td colspan="6" class="empty">No deposits or withdrawals in range.</td></tr>') +
-        '<tr><td colspan="5"><b>Net capital</b></td><td class="r"><b>' + money(A.totals.netCapital, { sign: true }) + '</b></td></tr></tbody></table>';
-    } else {
-      tools.innerHTML = '<span class="muted">Non-USDT coins still held at the end of the file, at average cost, plus coins the file gives no USDT price for.</span>';
-      const rows = S.model.otherAssets.map(a => '<tr><td>' + esc(a.asset) + '</td><td class="r">' + money(a.qty, { dp: 8 }) + '</td><td class="r">' + money(a.cost) + '</td><td>Held at cost</td></tr>')
-        .concat(S.model.unvalued.map(u => '<tr><td>' + esc(u.asset) + '</td><td class="r">' + money(u.qty, { dp: 8 }) + '</td><td class="r">—</td><td>No USDT price in file, valued at 0</td></tr>'));
-      wrap.innerHTML = '<table><thead><tr><th>Asset</th><th class="r">Quantity</th><th class="r">Cost (USDT)</th><th>Note</th></tr></thead><tbody>' + (rows.join('') || '<tr><td colspan="4" class="empty">Everything in this file is in USDT.</td></tr>') + '</tbody></table>';
-    }
-  }
-  function filteredTrades(A) {
-    const q = S.q.trim().toLowerCase();
-    const list = A.trades.map((t, i) => Object.assign({ i: i + 1 }, t)).filter(t =>
-      (S.result === 'all' || (S.result === 'win' ? t.net > 0 : t.net < 0)) &&
-      (!S.selDay || fmtDay(t.ts) === S.selDay) &&
-      (!q || [fmtDT(t.ts), t.label, t.market, t.ref].join(' ').toLowerCase().includes(q)));
-    const k = S.sort.key, dir = S.sort.dir;
-    list.sort((a, b) => (typeof a[k] === 'string' ? String(a[k]).localeCompare(String(b[k])) : (a[k] || 0) - (b[k] || 0)) * dir || (a.ts - b.ts) * dir);
-    return list;
-  }
-  function tradesCsv() {
-    const rows = filteredTrades(S.A);
-    const lines = ['closed_utc,market,type,gross_pnl,closing_fee,net_pnl,reference'];
-    for (const t of rows) lines.push([fmtDT(t.ts), t.market, '"' + t.label.replace(/"/g, '""') + '"', t.gross.toFixed(8), t.fee.toFixed(8), t.net.toFixed(8), t.ref || ''].join(','));
-    return { text: lines.join('\n'), n: rows.length };
-  }
-
-  function renderNotes(A) {
-    const m = S.model, r = C.reconcile(m);
-    const notes = [];
-    notes.push(m.rows.length.toLocaleString() + ' rows read from ' + (S.isDemo ? 'the demo export' : m.meta.fileNames.length + ' file' + (m.meta.fileNames.length > 1 ? 's' : '')) + '.');
-    if (m.duplicates) notes.push(m.duplicates + ' duplicate rows across files were counted once.');
-    if (m.meta.period) notes.push('Report period: ' + esc(m.meta.period) + '.');
-    for (const w of m.warnings.slice(0, 8)) notes.push(esc(w));
-    if (m.warnings.length > 8) notes.push((m.warnings.length - 8) + ' more warnings not shown.');
-    if (!m.warnings.length) notes.push('Every row was recognized.');
-    $('dataNotes').innerHTML = notes.map(n => '<li>' + n + '</li>').join('');
-    $('addBtn').hidden = S.isDemo;
-
-    let html = '<div class="recon">' +
-      '<div><span>Rebuilt from rows</span><span class="num">' + money(r.rebuilt) + ' USDT</span></div>' +
-      '<div><span>Report closing balance</span><span class="num">' + (r.reported == null ? 'Not stated' : money(r.reported) + ' USDT') + '</span></div>' +
-      (r.diff != null ? '<div><span>Difference</span><span class="num ' + (Math.abs(r.diff) > 0.01 ? 'neg' : '') + '">' + money(r.diff, { sign: true }) + '</span></div>' : '') + '</div>';
-    if (r.diff != null) {
-      const ok = Math.abs(r.diff) <= 0.01;
-      html += '<div class="status"><b class="pill ' + (ok ? 'good">✓ Matches' : 'bad">! Doesn’t match') + '</b><span>' + (ok
-        ? 'The rows add up to the balance the report states.'
-        : 'The rows add up to ' + money(r.rebuilt) + ' USDT, but the report header says ' + money(r.reported) + ' USDT' + (r.at ? ' at ' + esc(r.at) : '') +
-          '. PnL figures come from the rows, so they are unaffected. The gap usually means some balance changes are missing from the export, or the header value is wrong.') + '</span></div>';
-    } else {
-      html += '<p class="small">The report doesn’t state a closing balance, so there’s nothing to check against.</p>';
-    }
-    html += '<p class="small">Selected range: started at ' + money(A.totals.equityStart) + ', ended at ' + money(A.totals.equityEnd) + ' USDT.</p>';
-    $('recon').innerHTML = html;
-  }
-
-  // ---------- charts ----------
-  const charts = {};
-  function chart(id, option, label) {
-    const el = $(id);
-    if (!window.echarts) {
-      el.innerHTML = '<p class="chart-fallback">Charts need the charting library from cdnjs.cloudflare.com, which didn’t load. The numbers and tables above and below still work.</p>';
-      el.style.height = 'auto';
-      return null;
-    }
-    let c = charts[id];
-    if (!c) c = charts[id] = echarts.init(el, null, { renderer: 'canvas' });
-    c.setOption(option, true);
-    if (label) el.setAttribute('aria-label', label);
-    return c;
-  }
-  function base(T) {
-    return {
-      animationDuration: 350,
-      textStyle: { fontFamily: T.font, color: T.ink2 },
-      tooltip: {
-        trigger: 'axis', confine: true, backgroundColor: T.surface2, borderColor: T.line, borderWidth: 1, padding: [8, 10],
-        textStyle: { color: T.ink, fontSize: 12, fontFamily: T.font }, extraCssText: 'border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);',
-        axisPointer: { type: 'line', lineStyle: { color: T.muted, width: 1 }, label: { backgroundColor: T.ink2 } }
-      }
-    };
-  }
-  function axis(T, extra) {
-    return Object.assign({
-      axisLine: { lineStyle: { color: T.base } }, axisTick: { show: false },
-      axisLabel: { color: T.muted, fontSize: 11, hideOverlap: true },
-      splitLine: { lineStyle: { color: T.grid, width: 1 } }
-    }, extra || {});
-  }
-  const valAxis = (T, extra) => axis(T, Object.assign({ type: 'value', axisLine: { show: false }, axisLabel: { color: T.muted, fontSize: 11, formatter: compact } }, extra || {}));
-  const signBar = (v, T) => ({ value: v, itemStyle: { color: v >= 0 ? T.gain : T.loss, borderRadius: v >= 0 ? [4, 4, 0, 0] : [0, 0, 4, 4] } });
-  const tipRow = (color, label, val) => '<div style="display:flex;gap:14px;justify-content:space-between;align-items:center"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + color + ';margin-right:6px"></span>' + label + '</span><b style="font-variant-numeric:tabular-nums">' + val + '</b></div>';
-  const tipHead = s => '<div style="color:' + tokens().muted + ';margin-bottom:4px">' + s + '</div>';
-
-  function renderCharts(A, T) {
-    equityChart(A, T);
-    waterfallChart(A, T);
-    periodChart(A, T);
-    radarChart(A, T);
-    seqChart(A, T);
-    distChart(A, T);
-    bucketChart('chWeekday', A.byWeekday.map(g => g.key), A.byWeekday, T, 'weekday');
-    bucketChart('chHour', A.byHour.map(g => String(g.key).padStart(2, '0')), A.byHour, T, 'hour');
-    fundingChart(A, T);
-    costChart(A, T);
-  }
-
-  function equityChart(A, T) {
-    const o = base(T);
-    if (S.eqMode === 'equity') {
-      const pts = A.days.map(d => [d.ts + DAY - 1, d.equityEnd]);
-      pts.unshift([A.range.from, A.totals.equityStart]);
-      const flows = A.flows.map(f => ({ value: [f.ts, null], f }));
-      const eqAt = ts => { let v = A.totals.equityStart; for (const d of A.days) { if (d.ts + DAY - 1 <= ts) v = d.equityEnd; else break; } return v; };
-      flows.forEach(x => { x.value[1] = eqAt(x.f.ts); });
-      Object.assign(o, {
-        grid: [{ left: 8, right: 12, top: 16, bottom: 28, containLabel: true }],
-        xAxis: [axis(T, { type: 'time', splitLine: { show: false } })],
-        yAxis: [valAxis(T)],
-        dataZoom: [{ type: 'inside' }],
-        series: [
-          { name: 'Account value', type: 'line', step: 'end', showSymbol: false, data: pts, lineStyle: { width: 2, color: T.accent }, itemStyle: { color: T.accent },
-            areaStyle: { color: T.accent, opacity: 0.1 } },
-          { name: 'Deposit / withdrawal', type: 'scatter', data: flows, symbol: 'circle', symbolSize: 10,
-            itemStyle: { color: p => (p.data.f.value >= 0 ? T.gain : T.loss), borderColor: T.surface, borderWidth: 2 } }
-        ]
-      });
-      o.tooltip.formatter = ps => {
-        const p = ps.find(x => x.seriesIndex === 0) || ps[0];
-        let h = tipHead(fmtDay(p.value[0]));
-        for (const x of ps) {
-          if (x.seriesIndex === 0) h += tipRow(T.accent, 'Account value', money(x.value[1]) + ' USDT');
-          else h += tipRow(x.data.f.value >= 0 ? T.gain : T.loss, esc(x.data.f.label), money(x.data.f.value, { sign: true }));
-        }
-        return h;
-      };
-      chart('chEquity', o, 'Account value over time, ending at ' + money(A.totals.equityEnd) + ' USDT');
-      return;
-    }
-    const net = A.curve.map(p => [p.ts, +p.net.toFixed(6)]);
-    const gross = A.curve.map(p => [p.ts, +p.gross.toFixed(6)]);
-    const dd = A.curve.map(p => [p.ts, +p.dd.toFixed(6)]);
-    const end = net[net.length - 1];
-    Object.assign(o, {
-      legend: { top: 0, left: 0, icon: 'roundRect', itemWidth: 12, itemHeight: 3, textStyle: { color: T.ink2, fontSize: 12 }, data: ['Net PnL', 'Gross PnL', 'Drawdown'] },
-      grid: [{ left: 8, right: 64, top: 30, height: '58%', containLabel: true }, { left: 8, right: 64, top: '76%', bottom: 26, containLabel: true }],
-      axisPointer: { link: [{ xAxisIndex: 'all' }] },
-      xAxis: [axis(T, { type: 'time', gridIndex: 0, axisLabel: { show: false }, splitLine: { show: false } }),
-        axis(T, { type: 'time', gridIndex: 1, splitLine: { show: false } })],
-      yAxis: [valAxis(T, { gridIndex: 0 }), valAxis(T, { gridIndex: 1, splitNumber: 2, max: 0 })],
-      dataZoom: [{ type: 'inside', xAxisIndex: [0, 1] }],
-      series: [
-        { name: 'Gross PnL', type: 'line', step: 'end', showSymbol: false, data: gross, xAxisIndex: 0, yAxisIndex: 0, lineStyle: { width: 2, color: T.amber }, itemStyle: { color: T.amber } },
-        { name: 'Net PnL', type: 'line', step: 'end', showSymbol: false, data: net, xAxisIndex: 0, yAxisIndex: 0, lineStyle: { width: 2, color: T.accent }, itemStyle: { color: T.accent },
-          areaStyle: { color: T.accent, opacity: 0.1 },
-          markLine: { silent: true, symbol: 'none', lineStyle: { color: T.base, width: 1, type: 'solid' }, label: { show: false }, data: [{ yAxis: 0 }] },
-          markPoint: end ? { symbol: 'circle', symbolSize: 9, itemStyle: { color: T.accent, borderColor: T.surface, borderWidth: 2 },
-            label: { show: true, position: 'right', color: T.ink, fontWeight: 600, fontSize: 12, formatter: () => money(end[1], { sign: true }) }, data: [{ coord: end }] } : undefined },
-        { name: 'Drawdown', type: 'line', step: 'end', showSymbol: false, data: dd, xAxisIndex: 1, yAxisIndex: 1, lineStyle: { width: 1.5, color: T.loss }, itemStyle: { color: T.loss },
-          areaStyle: { color: T.loss, opacity: 0.14 } }
-      ]
-    });
-    o.tooltip.formatter = ps => {
-      if (!ps.length) return '';
-      const p = ps[0];
-      const i = p.dataIndex;
-      const c = A.curve[Math.min(i, A.curve.length - 1)];
-      return tipHead(fmtDT(c.ts) + ' UTC') + tipRow(T.accent, 'Net PnL', money(c.net, { sign: true })) + tipRow(T.amber, 'Gross PnL', money(c.gross, { sign: true })) +
-        tipRow(T.loss, 'Drawdown', money(c.dd));
-    };
-    chart('chEquity', o, 'Cumulative net PnL ending at ' + money(A.totals.net, { sign: true }) + ' USDT; max drawdown ' + money(A.risk.maxDD) + ' USDT');
-  }
-
-  function waterfallChart(A, T) {
-    const t = A.totals, s = A.stats;
-    const wins = A.trades.filter(x => x.gross > 0).reduce((a, x) => a + x.gross, 0);
-    const losses = A.trades.filter(x => x.gross < 0).reduce((a, x) => a + x.gross, 0);
-    const steps = [['Winning trades', wins], ['Losing trades', losses]];
-    if (S.incFees) steps.push(['Fees', t.fees]);
-    if (S.incFunding) steps.push(['Funding', t.funding]);
-    if (S.incIncome && Math.abs(t.income) > 0.005) steps.push(['Rewards', t.income]);
-    const resid = t.net - steps.reduce((a, x) => a + x[1], 0);
-    if (Math.abs(resid) > 0.005) steps.push(['Other PnL', resid]);
-    const cats = steps.map(x => x[0]).concat('Net PnL');
-    const vals = [], data = [];
-    let run = 0;
-    steps.forEach(([, v], i) => { data.push([i, run, run + v, v]); vals.push(v); run += v; });
-    data.push([steps.length, 0, run, run]); vals.push(run);
-    const colorOf = i => (i === steps.length ? T.accent : vals[i] >= 0 ? T.gain : T.loss);
-    const o = base(T);
-    Object.assign(o, {
-      grid: { left: 8, right: 16, top: 24, bottom: 8, containLabel: true },
-      xAxis: axis(T, { type: 'category', data: cats, axisLabel: { color: T.muted, fontSize: 11, interval: 0, width: 70, overflow: 'break' } }),
-      yAxis: valAxis(T),
-      series: [{ type: 'custom', encode: { x: 0, y: [1, 2] }, data,
-        renderItem: (params, api) => {
-          const i = api.value(0), a = api.value(1), b = api.value(2);
-          const p1 = api.coord([i, Math.max(a, b)]), p2 = api.coord([i, Math.min(a, b)]);
-          const w = Math.min(36, api.size([1, 0])[0] * 0.6);
-          return { type: 'rect', shape: { x: p1[0] - w / 2, y: p1[1], width: w, height: Math.max(1, p2[1] - p1[1]), r: 4 },
-            style: { fill: colorOf(i) },
-            textContent: { style: { text: money(vals[i], { sign: true }), fill: T.ink2, fontSize: 11 } },
-            textConfig: { position: vals[i] >= 0 ? 'top' : 'bottom', distance: 4 } };
-        } }]
-    });
-    o.tooltip = Object.assign(o.tooltip, { trigger: 'item', formatter: p => tipHead(cats[p.dataIndex]) + tipRow(colorOf(p.dataIndex), 'USDT', money(vals[p.dataIndex], { sign: true, small: true })) +
-      (p.dataIndex === 0 ? tipRow(T.gain, 'Trades', s.wins) : p.dataIndex === 1 ? tipRow(T.loss, 'Trades', s.losses) : '') });
-    chart('chWaterfall', o, 'Waterfall: ' + steps.map(x => x[0] + ' ' + money(x[1], { sign: true })).join(', ') + ', net ' + money(run, { sign: true }));
-  }
-
-  function periodChart(A, T) {
-    let rows;
-    if (S.period === 'day') rows = A.days.map(d => ({ key: d.day, net: d.net, trades: d.trades, realized: d.realized + d.spot + d.event, fees: d.fees, funding: d.funding }));
-    else rows = (S.period === 'week' ? A.weeks : A.months).map(g => ({ key: g.key, net: g.net, trades: g.trades, realized: g.realized, fees: g.fees, funding: g.funding }));
-    const o = base(T);
-    Object.assign(o, {
-      grid: { left: 8, right: 12, top: 16, bottom: 8, containLabel: true },
-      xAxis: axis(T, { type: 'category', data: rows.map(r => (S.period === 'week' ? 'Wk of ' + r.key.slice(5) : S.period === 'month' ? r.key : r.key.slice(5))) }),
-      yAxis: valAxis(T),
-      dataZoom: rows.length > 60 ? [{ type: 'inside', start: Math.max(0, 100 - (60 / rows.length) * 100), end: 100 }] : [],
-      series: [{ type: 'bar', barMaxWidth: 24, barMinHeight: 1, data: rows.map(r => signBar(+r.net.toFixed(6), T)) }]
-    });
-    o.tooltip.axisPointer = { type: 'shadow', shadowStyle: { color: T.grid, opacity: 0.6 } };
-    o.tooltip.formatter = ps => {
-      const r = rows[ps[0].dataIndex];
-      return tipHead((S.period === 'week' ? 'Week of ' : '') + r.key) + tipRow(r.net >= 0 ? T.gain : T.loss, 'Net PnL', money(r.net, { sign: true })) +
-        tipRow(T.accent, 'Realized', money(r.realized, { sign: true })) + tipRow(T.amber, 'Fees', money(r.fees, { small: true })) + tipRow(T.violet, 'Funding', money(r.funding, { sign: true, small: true })) +
-        tipRow(T.muted, 'Trades', r.trades);
-    };
-    chart('chPeriod', o);
-  }
-
-  function radarChart(A, T) {
-    const o = base(T);
-    Object.assign(o, {
-      tooltip: Object.assign(o.tooltip, { trigger: 'item', formatter: () => A.scoreParts.map(p => tipRow(T.accent, p.key, p.value == null ? 'n/a' : Math.round(p.value * 100))).join('') }),
-      radar: {
-        radius: '58%', center: ['50%', '54%'], splitNumber: 4,
-        indicator: A.scoreParts.map(p => ({ name: p.key.replace('Avg win / loss', 'Payoff').replace('Max drawdown', 'Drawdown').replace('Profit factor', 'PF'), max: 100 })),
-        axisName: { color: T.muted, fontSize: 10.5 },
-        splitLine: { lineStyle: { color: T.grid } }, splitArea: { show: false }, axisLine: { lineStyle: { color: T.grid } }
-      },
-      series: [{ type: 'radar', symbolSize: 6, data: [{ value: A.scoreParts.map(p => (p.value == null ? 0 : Math.round(p.value * 100))), name: 'Score' }],
-        lineStyle: { color: T.accent, width: 2 }, itemStyle: { color: T.accent, borderColor: T.surface, borderWidth: 2 }, areaStyle: { color: T.accent, opacity: 0.16 } }]
-    });
-    chart('chRadar', o);
-  }
-
-  function seqChart(A, T) {
-    const o = base(T);
-    Object.assign(o, {
-      grid: { left: 8, right: 12, top: 16, bottom: 8, containLabel: true },
-      xAxis: axis(T, { type: 'category', data: A.trades.map((t, i) => '#' + (i + 1)) }),
-      yAxis: valAxis(T),
-      dataZoom: A.trades.length > 120 ? [{ type: 'inside', start: 100 - (120 / A.trades.length) * 100, end: 100 }] : [],
-      series: [{ type: 'bar', barMaxWidth: 24, barMinHeight: 1, data: A.trades.map(t => signBar(+t.net.toFixed(6), T)) }]
-    });
-    o.tooltip.axisPointer = { type: 'shadow', shadowStyle: { color: T.grid, opacity: 0.6 } };
-    o.tooltip.formatter = ps => {
-      const t = A.trades[ps[0].dataIndex];
-      return tipHead('Trade #' + (ps[0].dataIndex + 1) + ' · ' + fmtDT(t.ts) + ' UTC') + tipRow(t.net >= 0 ? T.gain : T.loss, 'Net', money(t.net, { sign: true, small: true })) +
-        tipRow(T.accent, 'Gross', money(t.gross, { sign: true, small: true })) + tipRow(T.amber, 'Closing fee', money(t.fee, { small: true })) + tipRow(T.muted, 'Market', t.market === 'spot' ? 'Spot' : 'Futures');
-    };
-    const c = chart('chSeq', o);
-    if (c) { c.off('click'); c.on('click', p => { const t = A.trades[p.dataIndex]; if (t) selectDay(fmtDay(t.ts)); }); }
-  }
-
-  function distChart(A, T) {
-    const h = A.histogram;
-    const o = base(T);
-    const lbl = b => compact(b.lo) + ' to ' + compact(b.hi);
-    Object.assign(o, {
-      grid: { left: 8, right: 12, top: 16, bottom: 8, containLabel: true },
-      xAxis: axis(T, { type: 'category', data: h.map(b => compact((b.lo + b.hi) / 2)), name: 'USDT', nameLocation: 'end', nameTextStyle: { color: T.muted, fontSize: 10 } }),
-      yAxis: valAxis(T, { minInterval: 1, axisLabel: { color: T.muted, fontSize: 11 } }),
-      series: [{ type: 'bar', barCategoryGap: '8%', data: h.map(b => ({ value: b.count, itemStyle: { color: (b.lo + b.hi) / 2 >= 0 ? T.gain : T.loss, borderRadius: [4, 4, 0, 0] } })) }]
-    });
-    o.tooltip.axisPointer = { type: 'shadow', shadowStyle: { color: T.grid, opacity: 0.6 } };
-    o.tooltip.formatter = ps => { const b = h[ps[0].dataIndex]; return tipHead(lbl(b) + ' USDT') + tipRow(ps[0].color, 'Trades', b.count) + tipRow(T.muted, 'Sum', money(b.sum, { sign: true })); };
-    chart('chDist', o);
-  }
-
-  function bucketChart(id, labels, groups, T, kind) {
-    const o = base(T);
-    Object.assign(o, {
-      grid: { left: 8, right: 12, top: 12, bottom: 8, containLabel: true },
-      xAxis: axis(T, { type: 'category', data: labels, axisLabel: { color: T.muted, fontSize: 11, interval: kind === 'hour' ? 2 : 0 } }),
-      yAxis: valAxis(T),
-      series: [{ type: 'bar', barMaxWidth: 24, barMinHeight: 1, data: groups.map(g => (g.trades ? signBar(+g.net.toFixed(6), T) : { value: 0, itemStyle: { color: T.mid } })) }]
-    });
-    o.tooltip.axisPointer = { type: 'shadow', shadowStyle: { color: T.grid, opacity: 0.6 } };
-    o.tooltip.formatter = ps => {
-      const g = groups[ps[0].dataIndex];
-      const wr = g.wins + g.losses ? pct(g.wins / (g.wins + g.losses), 0) : '—';
-      return tipHead(kind === 'hour' ? String(g.key).padStart(2, '0') + ':00–' + String(g.key).padStart(2, '0') + ':59 UTC' : g.key) +
-        tipRow(g.net >= 0 ? T.gain : T.loss, 'Net PnL', money(g.net, { sign: true })) + tipRow(T.muted, 'Trades', g.trades) + tipRow(T.muted, 'Win rate', wr);
-    };
-    chart(id, o);
-  }
-
-  function fundingChart(A, T) {
-    const days = A.days;
-    const recv = [], paid = [];
-    const byDay = new Map(days.map(d => [d.day, { r: 0, p: 0 }]));
-    for (const e of A.events) {
-      if (e.cat !== 'funding') continue;
-      const g = byDay.get(fmtDay(e.ts)); if (!g) continue;
-      if (e.value > 0) g.r += e.value; else g.p += e.value;
-    }
-    for (const d of days) { const g = byDay.get(d.day); recv.push([d.ts, +g.r.toFixed(8)]); paid.push([d.ts, +g.p.toFixed(8)]); }
-    const pos = A.positions.map(p => [p.ts, p.count]);
-    const o = base(T);
-    Object.assign(o, {
-      legend: { top: 0, left: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: T.ink2, fontSize: 12 }, data: ['Received', 'Paid', 'Positions held'] },
-      grid: [{ left: 8, right: 12, top: 30, height: '50%', containLabel: true }, { left: 8, right: 12, top: '72%', bottom: 24, containLabel: true }],
-      axisPointer: { link: [{ xAxisIndex: 'all' }] },
-      xAxis: [axis(T, { type: 'time', gridIndex: 0, axisLabel: { show: false }, splitLine: { show: false } }), axis(T, { type: 'time', gridIndex: 1, splitLine: { show: false } })],
-      yAxis: [valAxis(T, { gridIndex: 0, axisLabel: { color: T.muted, fontSize: 11 } }), valAxis(T, { gridIndex: 1, minInterval: 1, splitNumber: 2, axisLabel: { color: T.muted, fontSize: 11 } })],
-      dataZoom: [{ type: 'inside', xAxisIndex: [0, 1] }],
-      series: [
-        { name: 'Received', type: 'bar', stack: 'f', data: recv, xAxisIndex: 0, yAxisIndex: 0, barMaxWidth: 14, itemStyle: { color: T.gain, borderRadius: [3, 3, 0, 0] } },
-        { name: 'Paid', type: 'bar', stack: 'f', data: paid, xAxisIndex: 0, yAxisIndex: 0, barMaxWidth: 14, itemStyle: { color: T.loss, borderRadius: [0, 0, 3, 3] } },
-        { name: 'Positions held', type: 'line', step: 'end', showSymbol: false, data: pos, xAxisIndex: 1, yAxisIndex: 1, lineStyle: { width: 2, color: T.violet }, itemStyle: { color: T.violet },
-          areaStyle: { color: T.violet, opacity: 0.1 } }
-      ]
-    });
-    o.tooltip.formatter = ps => {
-      if (!ps.length) return '';
-      const ts = ps[0].value[0];
-      let h = tipHead(ps[0].seriesIndex === 2 ? fmtDT(ts) + ' UTC' : fmtDay(ts));
-      for (const p of ps) h += tipRow(p.color, p.seriesName, p.seriesIndex === 2 ? p.value[1] : money(p.value[1], { sign: true, small: true }));
-      return h;
-    };
-    chart('chFunding', o, 'Funding received ' + money(A.totals.fundingReceived) + ' and paid ' + money(-A.totals.fundingPaid) + ' USDT');
-  }
-
-  function costChart(A, T) {
-    const cc = A.costCurve;
-    const o = base(T);
-    Object.assign(o, {
-      legend: { top: 0, left: 0, icon: 'roundRect', itemWidth: 12, itemHeight: 3, textStyle: { color: T.ink2, fontSize: 12 } },
-      grid: { left: 8, right: 12, top: 30, bottom: 8, containLabel: true },
-      xAxis: axis(T, { type: 'time', splitLine: { show: false } }),
-      yAxis: valAxis(T),
-      series: [
-        { name: 'Fees', type: 'line', step: 'end', showSymbol: false, data: cc.map(p => [p.ts, +p.fees.toFixed(6)]), lineStyle: { width: 2, color: T.amber }, itemStyle: { color: T.amber } },
-        { name: 'Funding', type: 'line', step: 'end', showSymbol: false, data: cc.map(p => [p.ts, +p.funding.toFixed(6)]), lineStyle: { width: 2, color: T.violet }, itemStyle: { color: T.violet } },
-        { name: 'Combined', type: 'line', step: 'end', showSymbol: false, data: cc.map(p => [p.ts, +p.total.toFixed(6)]), lineStyle: { width: 2, color: T.ink2 }, itemStyle: { color: T.ink2 } }
-      ]
-    });
-    o.tooltip.formatter = ps => ps.length ? tipHead(fmtDT(ps[0].value[0]) + ' UTC') + ps.map(p => tipRow(p.color, p.seriesName, money(p.value[1], { sign: true }))).join('') : '';
-    chart('chCost', o);
-  }
-
-  // ---------- interactions ----------
-  function selectDay(day) {
-    S.selDay = S.selDay === day ? null : day;
-    if (S.selDay) { S.tab = S.tab === 'ledger' ? 'ledger' : 'trades'; S.calMonth = day.slice(0, 7); }
-    renderCalendar(S.A, tokens());
-    renderTables(S.A, tokens());
-    if (S.selDay) $('records').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-  }
-  function openPicker(append) { (append ? $('addInput') : $('fileInput')).click(); }
-
-  function bind() {
-    $('uploadBtn').addEventListener('click', () => openPicker(false));
-    $('addBtn').addEventListener('click', () => openPicker(true));
-    $('fileInput').addEventListener('change', e => { if (e.target.files.length) readFiles(e.target.files, false); e.target.value = ''; });
-    $('addInput').addEventListener('change', e => { if (e.target.files.length) readFiles(e.target.files, true); e.target.value = ''; });
-    $('banner').addEventListener('click', e => {
-      const a = e.target.closest('[data-act]'); if (!a) return;
-      if (a.dataset.act === 'upload') openPicker(false); else if (a.dataset.act === 'demo') loadDemo();
-    });
-    $('presets').addEventListener('click', e => { const b = e.target.closest('button'); if (b) applyPreset(b.dataset.p); });
-    $('market').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.market = b.dataset.m; render(); } });
-    $('period').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.period = b.dataset.v; renderControls(); periodChart(S.A, tokens()); } });
-    $('eqMode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.eqMode = b.dataset.v; renderControls(); renderHero(S.A, tokens()); equityChart(S.A, tokens()); } });
-    for (const [id, key] of [['incFees', 'incFees'], ['incFunding', 'incFunding'], ['incIncome', 'incIncome']]) {
-      $(id).addEventListener('click', () => { S[key] = !S[key]; render(); });
-    }
-    const onDate = () => {
-      const f = Date.parse($('fromDate').value + 'T00:00:00Z'), t = Date.parse($('toDate').value + 'T00:00:00Z');
-      if (Number.isNaN(f) || Number.isNaN(t)) return;
-      S.preset = 'custom'; S.from = Math.min(f, t); S.to = Math.max(f, t); S.selDay = null; S.calMonth = null; render();
-    };
-    $('fromDate').addEventListener('change', onDate);
-    $('toDate').addEventListener('change', onDate);
-    $('account').addEventListener('change', e => { S.account = e.target.value; render(); });
-    $('calPrev').addEventListener('click', () => shiftMonth(-1));
-    $('calNext').addEventListener('click', () => shiftMonth(1));
-    $('cal').addEventListener('click', e => { const c = e.target.closest('[data-day]'); if (c) selectDay(c.dataset.day); });
-    $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) { S.tab = b.dataset.t; S.q = ''; S.limit = 200; renderTables(S.A, tokens()); } });
-    $('records').addEventListener('input', e => {
-      if (e.target.id === 'q') {
-        S.q = e.target.value; S.limit = 200;
-        const pos = e.target.selectionStart;
-        renderTables(S.A, tokens());
-        const q = $('q'); q.focus(); try { q.setSelectionRange(pos, pos); } catch (err) { /* search inputs may not support it */ }
-      }
-    });
-    $('records').addEventListener('change', e => { if (e.target.id === 'ledgerCat') { S.ledgerCat = e.target.value; S.limit = 200; renderTables(S.A, tokens()); } });
-    $('records').addEventListener('click', e => {
-      const th = e.target.closest('th[data-sort]');
-      if (th) { const k = th.dataset.sort; S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : (k === 'ts' ? -1 : 1) }; renderTables(S.A, tokens()); return; }
-      const seg = e.target.closest('#resultSeg button');
-      if (seg) { S.result = seg.dataset.v; renderTables(S.A, tokens()); return; }
-      if (e.target.closest('#clearDay')) { selectDay(S.selDay); return; }
-      if (e.target.closest('#showMore')) { S.limit += 500; renderTables(S.A, tokens()); return; }
-      if (e.target.closest('#copyCsv')) copyCsv();
-    });
-    $('records').addEventListener('keydown', e => {
-      const th = e.target.closest('th[data-sort]');
-      if (th && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); th.click(); }
-    });
-    $('themeBtn').addEventListener('click', () => {
-      const root = document.documentElement;
-      const cur = root.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-      const next = cur === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', next); store.set('theme', next);
-    });
-    matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => render());
-    new MutationObserver(() => render()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-
-    // Drag and drop anywhere on the page.
-    let depth = 0;
-    window.addEventListener('dragenter', e => { if ([...(e.dataTransfer.types || [])].includes('Files')) { depth++; $('drop').hidden = false; e.preventDefault(); } });
-    window.addEventListener('dragover', e => { if ([...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault(); });
-    window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) $('drop').hidden = true; });
-    window.addEventListener('drop', e => {
-      e.preventDefault(); depth = 0; $('drop').hidden = true;
-      if (e.dataTransfer.files.length) readFiles(e.dataTransfer.files, false);
-    });
-
-    window.addEventListener('keydown', e => {
-      if (e.metaKey || e.ctrlKey || e.altKey || /input|select|textarea/i.test(e.target.tagName)) return;
-      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); openPicker(false); }
-      const p = { 1: 'all', 2: '7', 3: '30', 4: '90', 5: 'ytd' }[e.key];
-      if (p && S.model) applyPreset(p);
-    });
-    let rt;
-    window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => Object.values(charts).forEach(c => c.resize()), 120); });
-  }
-  function shiftMonth(d) {
-    const months = [...new Set(S.A.days.map(x => x.day.slice(0, 7)))];
-    const i = months.indexOf(S.calMonth) + d;
-    if (i >= 0 && i < months.length) { S.calMonth = months[i]; renderCalendar(S.A, tokens()); }
-  }
-  function copyCsv() {
-    const { text, n } = tradesCsv();
-    const fallback = () => {
-      let box = $('copyBox');
-      if (!box) { box = document.createElement('textarea'); box.id = 'copyBox'; box.className = 'copybox'; box.readOnly = true; box.setAttribute('aria-label', 'Trades as CSV'); $('tableMore').appendChild(box); }
-      box.value = text; box.focus(); box.select();
-      toast('Select all and copy the CSV below');
-    };
-    try {
-      navigator.clipboard.writeText(text).then(() => toast('Copied ' + n + ' trades as CSV'), fallback);
-    } catch (err) { fallback(); }
-  }
-
-  // Boot.
-  const savedTheme = store.get('theme');
-  if (savedTheme && !document.documentElement.hasAttribute('data-theme')) document.documentElement.setAttribute('data-theme', savedTheme);
-  bind();
-  loadDemo();
-})();
 </script>
 </body>
 </html>
