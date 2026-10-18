@@ -114,7 +114,7 @@ test('analyze: daily series, histogram, score, reconcile', () => {
   assert.equal(a.histogram.reduce((s, b) => s + b.count, 0), 3);
   assert.ok(a.score >= 0 && a.score <= 100);
   close(C.reconcile(m).diff, 0);
-  assert.equal(C.maskUid('843678125'), '84••••125');
+  assert.equal(C.maskUid('100000042'), '10••••042');
 });
 
 test('analyze: reversed file gives the same result', () => {

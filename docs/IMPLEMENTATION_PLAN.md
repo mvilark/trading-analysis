@@ -46,7 +46,7 @@ An excerpt of a real file:
 ```
 Platform: Bitunix
 Export Date: 2026-10-18 00:39 UTC
-User UID: 843678125
+User UID: 100000042
 Period: 2025-10-18 ~ 2026-10-18
 "Data Types:
 Buy Order
@@ -419,7 +419,7 @@ Use `font-variant-numeric: tabular-nums` in tables.
 - Tests: maxDD −81.0; 10 days whose nets sum to the total; 2026-01-05 has 1 loss; the filter, market and toggle rows in §2.
 
 ### P3.3 Histogram, funding, costs, score, reconcile
-- Add these, plus `reconcile(model)` and `maskUid(uid)`. `maskUid` keeps the first 2 and last 3 characters and puts `•` in between: `843678125` → `84••••125`.
+- Add these, plus `reconcile(model)` and `maskUid(uid)`. `maskUid` keeps the first 2 and last 3 characters and puts `•` in between: `100000042` → `10••••042`.
 - Tests:
   - openingFees −1.43
   - reconcile diff 0
@@ -638,7 +638,7 @@ Then look at the screenshots and fix anything visibly wrong: overlapping or clip
 
 ### P8.3 Final pass
 - Run `node --test tests/*.test.mjs` and `node tests/e2e/smoke.mjs`. Both must pass.
-- Check that no real data is committed: the fixture is the only CSV in git, and `git grep -n "843678125"` finds nothing.
+- Check that no real data is committed: the fixture is the only CSV in git, and `git grep -n "<the real UID>"` finds nothing.
 - Commit, then push to this branch.
 - Report back to the user:
   - the net PnL, trade count and win rate the app shows for the fixture, and for the real file if you had it
