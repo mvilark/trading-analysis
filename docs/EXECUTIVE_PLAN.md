@@ -53,7 +53,7 @@ This is a self-hosted **Next.js** app that pulls a trader's full **spot and futu
 
 ### Settings and sync
 - API connection status, a "last synced" time, manual re-sync and a sync log.
-- CSV import as a fallback for history older than the API returns.
+- CSV import as a fallback for history older than the API returns. A working CSV-only version already exists: `dashboard/index.html` (PnL Lens).
 
 ## 5. Architecture
 
